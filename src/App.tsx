@@ -67,10 +67,7 @@ import {
   X,
 } from "lucide-react";
 import { Article, ClubEvent, demoArticles, demoEvents } from "./data";
-import {
-  TeamData,
-  TeamSource,
-} from "./teamSources";
+import { TeamData, TeamSource } from "./teamSources";
 import { auth, db, firebaseEnabled } from "./firebase";
 
 type SiteRole = "admin" | "editor";
@@ -165,10 +162,7 @@ function BoardMemberPhoto({
   return (
     <img
       className={`${className ?? ""}${hasPhoto ? "" : " board-photo-placeholder"}`}
-      src={
-        member.photoUrl ||
-        `${import.meta.env.BASE_URL}logo.png`
-      }
+      src={member.photoUrl || `${import.meta.env.BASE_URL}logo.png`}
       alt={
         hasPhoto
           ? `Portrait de ${member.name}`
@@ -257,6 +251,16 @@ async function resolveSiteRole(
   };
 }
 
+function scrollToPageTop() {
+  const reducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  window.scrollTo({
+    top: 0,
+    behavior: reducedMotion ? "auto" : "smooth",
+  });
+}
+
 function useSiteSession() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(!auth);
@@ -302,29 +306,42 @@ function Brand() {
 
 function Header() {
   const [open, setOpen] = useState(false);
+  const menuToggleRef = useRef<HTMLButtonElement>(null);
   return (
-    <header className={open ? "site-header menu-open" : "site-header"}>
+    <header
+      className={open ? "site-header menu-open" : "site-header"}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && open) {
+          setOpen(false);
+          menuToggleRef.current?.focus();
+        }
+      }}
+    >
       <div className="header-inner">
         <Brand />
         <button
+          ref={menuToggleRef}
           className="menu-toggle"
+          type="button"
           aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
           aria-expanded={open}
+          aria-controls="primary-navigation"
           onClick={() => setOpen(!open)}
         >
-          {open ? <X /> : <Menu />}
+          {open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
         </button>
         <nav
+          id="primary-navigation"
           className={open ? "main-nav is-open" : "main-nav"}
           aria-label="Navigation principale"
         >
           {[
             ["Accueil", "/"],
-            ["Le bureau", "/bureau"],
-            ["Créneaux", "/creneaux"],
-            ["Évènements", "/evenements"],
-            ["Les équipes", "/equipes"],
             ["Actualités", "/actualites"],
+            ["Évènements", "/evenements"],
+            ["Créneaux", "/creneaux"],
+            ["Les équipes", "/equipes"],
+            ["Le bureau", "/bureau"],
             ["Contact", "/contact"],
           ].map(([label, path]) => (
             <NavLink
@@ -356,10 +373,10 @@ function Footer() {
         </div>
         <div>
           <span className="footer-label">Explorer</span>
-          <Link to="/bureau">Le bureau</Link>
-          <Link to="/creneaux">Créneaux</Link>
-          <Link to="/evenements">Évènements</Link>
           <Link to="/actualites">Actualités</Link>
+          <Link to="/evenements">Évènements</Link>
+          <Link to="/creneaux">Créneaux</Link>
+          <Link to="/bureau">Le bureau</Link>
           <Link to="/contact">Nous contacter</Link>
         </div>
         <div>
@@ -405,13 +422,60 @@ function Footer() {
 }
 
 function PageFrame({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  const previousPath = useRef(pathname);
+  const [pageTitle, setPageTitle] = useState("Cognac Badminton");
+
+  useEffect(() => {
+    const main = document.getElementById("contenu");
+    const headingElement = main?.querySelector("h1");
+    const headingMarkup = headingElement?.innerHTML.replace(
+      /<br\s*\/?>/gi,
+      " ",
+    );
+    const heading =
+      (
+        (headingMarkup
+          ? new DOMParser().parseFromString(headingMarkup, "text/html").body
+              .textContent
+          : null) ??
+        headingElement?.textContent ??
+        ""
+      )
+        .replace(/\s+/g, " ")
+        .trim() ||
+      (pathname.startsWith("/actualites/")
+        ? "Actualité indisponible"
+        : "Page indisponible");
+
+    const title =
+      pathname === "/"
+        ? "Cognac Badminton | Jouons collectif"
+        : `${heading} | Cognac Badminton`;
+    document.title = title;
+    main?.setAttribute("aria-label", heading);
+    setPageTitle(heading);
+
+    if (previousPath.current !== pathname) {
+      if (headingElement) {
+        headingElement.setAttribute("tabindex", "-1");
+        headingElement.focus({ preventScroll: true });
+      } else {
+        main?.focus({ preventScroll: true });
+      }
+    }
+    previousPath.current = pathname;
+  }, [pathname]);
+
   return (
     <>
       <a className="skip-link" href="#contenu">
         Aller au contenu
       </a>
       <Header />
-      <main id="contenu">{children}</main>
+      <main id="contenu" tabIndex={-1} aria-label={pageTitle}>
+        {children}
+      </main>
       <Footer />
       <PageScrollControls />
     </>
@@ -441,7 +505,7 @@ function PageScrollControls() {
       type="button"
       aria-label="Revenir en haut de page"
       title="Revenir en haut de page"
-      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      onClick={scrollToPageTop}
     >
       <ArrowUp size={20} aria-hidden="true" />
     </button>
@@ -655,11 +719,14 @@ function Home() {
             </Link>
           </div>
         </div>
-        <div className="hero-index">
+        <div className="hero-index" aria-hidden="true">
           <span>0{slide + 1}</span>
           <span className="hero-index-line" />
           03
         </div>
+        <span className="visually-hidden" aria-live="polite" aria-atomic="true">
+          Photo {slide + 1} sur {gallery.length}
+        </span>
         <div className="hero-controls">
           <button
             aria-label="Photo précédente"
@@ -1165,9 +1232,7 @@ function useWeeklySchedule() {
       })
       .catch(() => {
         if (active)
-          setError(
-            "Les horaires ne peuvent pas être chargés pour le moment.",
-          );
+          setError("Les horaires ne peuvent pas être chargés pour le moment.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -1202,7 +1267,11 @@ function ScheduleTable({
         const showDay = !normalizedDay || !seenDays.has(normalizedDay);
         if (normalizedDay) seenDays.add(normalizedDay);
         return (
-          <div className="schedule-line" role="row" key={`${slot.day}-${index}`}>
+          <div
+            className="schedule-line"
+            role="row"
+            key={`${slot.day}-${index}`}
+          >
             <strong role="rowheader" aria-label={slot.day || undefined}>
               {showDay ? slot.day : ""}
             </strong>
@@ -1245,7 +1314,9 @@ function SchedulePage() {
               Chargement des horaires…
             </p>
           ) : error ? (
-            <p className="form-error" role="alert">{error}</p>
+            <p className="form-error" role="alert">
+              {error}
+            </p>
           ) : schedule ? (
             <div className="schedule-groups">
               <section
@@ -1488,13 +1559,7 @@ function getMatchResultClass(match: TeamData["matches"][number]): string {
 function renderStandingPlace(position: string) {
   const place = Number.parseInt(position, 10);
   const medal =
-    place === 1
-      ? "🥇"
-      : place === 2
-        ? "🥈"
-        : place === 3
-          ? "🥉"
-          : null;
+    place === 1 ? "🥇" : place === 2 ? "🥈" : place === 3 ? "🥉" : null;
   if (!medal) return position;
 
   return (
@@ -1543,32 +1608,29 @@ function TeamDetails() {
     key: "name",
     direction: "ascending",
   });
-  const sortedPlayers = useMemo(
-    () => {
-      const rankingIndex = {
-        single: 0,
-        double: 1,
-        mixed: 2,
-      } as const;
-      return [...(data?.players ?? [])].sort((first, second) => {
-        const firstValue =
-          playerSort.key === "name"
-            ? first.name
-            : getPlayerRankings(first.role)[rankingIndex[playerSort.key]];
-        const secondValue =
-          playerSort.key === "name"
-            ? second.name
-            : getPlayerRankings(second.role)[rankingIndex[playerSort.key]];
-        const comparison = (firstValue ?? "").localeCompare(
-          secondValue ?? "",
-          "fr",
-          { sensitivity: "base", numeric: true },
-        );
-        return playerSort.direction === "ascending" ? comparison : -comparison;
-      });
-    },
-    [data?.players, playerSort],
-  );
+  const sortedPlayers = useMemo(() => {
+    const rankingIndex = {
+      single: 0,
+      double: 1,
+      mixed: 2,
+    } as const;
+    return [...(data?.players ?? [])].sort((first, second) => {
+      const firstValue =
+        playerSort.key === "name"
+          ? first.name
+          : getPlayerRankings(first.role)[rankingIndex[playerSort.key]];
+      const secondValue =
+        playerSort.key === "name"
+          ? second.name
+          : getPlayerRankings(second.role)[rankingIndex[playerSort.key]];
+      const comparison = (firstValue ?? "").localeCompare(
+        secondValue ?? "",
+        "fr",
+        { sensitivity: "base", numeric: true },
+      );
+      return playerSort.direction === "ascending" ? comparison : -comparison;
+    });
+  }, [data?.players, playerSort]);
   if (loading)
     return (
       <section className="section article-missing">
@@ -1626,8 +1688,7 @@ function TeamDetails() {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
-              . Ces
-              informations proviennent de la FFBaD
+              . Ces informations proviennent de la FFBaD
               {data.season ? ` pour la saison ${data.season}` : ""}.
             </p>
           )}
@@ -1664,7 +1725,9 @@ function TeamDetails() {
                             <th
                               key={key}
                               className={
-                                key === "name" ? undefined : "team-ranking-column"
+                                key === "name"
+                                  ? undefined
+                                  : "team-ranking-column"
                               }
                               scope="col"
                               aria-sort={
@@ -1704,10 +1767,7 @@ function TeamDetails() {
                                     <ArrowDown size={14} aria-hidden="true" />
                                   )
                                 ) : (
-                                  <ArrowUpDown
-                                    size={14}
-                                    aria-hidden="true"
-                                  />
+                                  <ArrowUpDown size={14} aria-hidden="true" />
                                 )}
                               </button>
                             </th>
@@ -1847,10 +1907,7 @@ function TeamDetails() {
                           <th scope="col">Date</th>
                           <th scope="col">Rencontre</th>
                           <th scope="col">Lieu</th>
-                          <th
-                            className="team-table-center-cell"
-                            scope="col"
-                          >
+                          <th className="team-table-center-cell" scope="col">
                             Résultat
                           </th>
                         </tr>
@@ -2522,7 +2579,7 @@ function BoardMembersManager() {
         ? await uploadClubImage(photoFile)
         : removePhoto
           ? ""
-          : editing?.photoUrl ?? "";
+          : (editing?.photoUrl ?? "");
       const memberOrder =
         editing?.order ??
         members.findIndex((member) => member.id === editing?.id);
@@ -2851,7 +2908,7 @@ function BoardMembersManager() {
           />
         )}
         <img
-          className={`board-photo-preview${(!removePhoto && (photoPreview || editing?.photoUrl)) ? "" : " board-photo-placeholder"}`}
+          className={`board-photo-preview${!removePhoto && (photoPreview || editing?.photoUrl) ? "" : " board-photo-placeholder"}`}
           src={
             (removePhoto ? "" : photoPreview) ||
             (removePhoto ? "" : editing?.photoUrl) ||
@@ -2981,15 +3038,8 @@ function Contact() {
                 <span>CONTACT DIRECT</span>
                 <p>
                   Contactez-nous directement par courriel :{" "}
-                  <a href="mailto:badcognac@gmail.com">
-                    badcognac@gmail.com
-                  </a>
-                </p>
-                <p>
-                  ou{" "}
-                  <Link to="#message">
-                    utilisez le formulaire de contact.
-                  </Link>
+                  <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a>{" "}
+                  ou utilisez ce formulaire.
                 </p>
               </div>
             </div>
@@ -2998,7 +3048,7 @@ function Contact() {
               <div>
                 <span>GYMNASES</span>
                 <p>
-                  Adultes : Gymnase Beaulieu, rue du Port à Cognac.
+                  Adultes : Gymnase Beaulieu, Rue du Port à Cognac.
                   <br />
                   Jeunes : Gymnase Jean Monnet (Collège Jean Monnet).
                 </p>
@@ -3009,8 +3059,9 @@ function Contact() {
               <div>
                 <span>RENSEIGNEMENTS</span>
                 <p>
-                  Vous pouvez aussi poser votre question directement sur place :
-                  Gymnase Beaulieu, rue du Port à Cognac.
+                  Vous pouvez aussi poser votre question directement sur place
+                  lors des horaires d'ouverture au Gymnase Beaulieu, Rue du Port
+                  à Cognac.
                 </p>
               </div>
             </div>
@@ -3079,8 +3130,7 @@ function Contact() {
                   />
                 </label>
                 <p className="contact-privacy">
-                  Vos coordonnées sont utilisées pour répondre à votre demande.
-                  {" "}
+                  Vos coordonnées sont utilisées pour répondre à votre demande.{" "}
                   <Link to="/rgpd">Lire la politique de confidentialité</Link>.
                 </p>
                 <button
@@ -3126,7 +3176,8 @@ function LegalNotice() {
               <br />
               Siège social : Rue du Port, 16100 Cognac, France
               <br />
-              Courriel : <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a>
+              Courriel :{" "}
+              <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a>
               <br />
               Aucun numéro de téléphone public n’a été communiqué par le club.
             </p>
@@ -3138,10 +3189,14 @@ function LegalNotice() {
           <section>
             <h2>Hébergement</h2>
             <p>
-              Le site est hébergé par GitHub Pages, service de GitHub, Inc.,
-              88 Colin P Kelly Jr St, San Francisco, CA 94107, États-Unis.
+              Le site est hébergé par GitHub Pages, service de GitHub, Inc., 88
+              Colin P Kelly Jr St, San Francisco, CA 94107, États-Unis.
               <br />
-              <a href="https://support.github.com/contact" target="_blank" rel="noreferrer">
+              <a
+                href="https://support.github.com/contact"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Contacter l’assistance GitHub
               </a>
             </p>
@@ -3149,31 +3204,42 @@ function LegalNotice() {
           <section>
             <h2>Propriété intellectuelle</h2>
             <p>
-              Les textes, photographies, marques et autres éléments présents
-              sur ce site peuvent être protégés par des droits de propriété
+              Les textes, photographies, marques et autres éléments présents sur
+              ce site peuvent être protégés par des droits de propriété
               intellectuelle. Leur réutilisation nécessite l’autorisation
-              préalable de leurs titulaires, sauf exception légale. Les
-              contenus de tiers restent la propriété de leurs auteurs ou
-              ayants droit.
+              préalable de leurs titulaires, sauf exception légale. Les contenus
+              de tiers restent la propriété de leurs auteurs ou ayants droit.
             </p>
           </section>
           <section>
             <h2>Sources et informations</h2>
             <p>
-              Les informations sportives publiées sur les pages des équipes
-              sont issues des pages publiques de la{" "}
-              <a href="https://icbad.ffbad.org/instance/CB16" target="_blank" rel="noreferrer">
+              Les informations sportives publiées sur les pages des équipes sont
+              issues des pages publiques de la{" "}
+              <a
+                href="https://icbad.ffbad.org/instance/CB16"
+                target="_blank"
+                rel="noreferrer"
+              >
                 FFBaD / ICBaD
               </a>
               . Les contenus du site sont fournis à titre informatif ; pour
               confirmer un horaire ou une rencontre, contactez le club.
             </p>
             <p>
-              <a href="https://entreprendre.service-public.gouv.fr/vosdroits/F37351" target="_blank" rel="noreferrer">
+              <a
+                href="https://entreprendre.service-public.gouv.fr/vosdroits/F37351"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Informations officielles sur les mentions des sites internet
               </a>
               {" · "}
-              <a href="https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000801164/" target="_blank" rel="noreferrer">
+              <a
+                href="https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000801164/"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Loi pour la confiance dans l’économie numérique
               </a>
             </p>
@@ -3198,7 +3264,9 @@ function PrivacyPolicy() {
       />
       <section className="section legal-section">
         <div className="container legal-content">
-          <p className="legal-updated">Dernière mise à jour : 22 octobre 2026</p>
+          <p className="legal-updated">
+            Dernière mise à jour : 22 octobre 2026
+          </p>
           <section>
             <h2>Responsable du traitement</h2>
             <p>
@@ -3230,27 +3298,26 @@ function PrivacyPolicy() {
                 photographies des membres du bureau, ainsi que les informations
                 sportives publiées par la FFBaD/ICBaD (noms des joueurs,
                 équipes, classements et rencontres). Ces données servent à
-                présenter les activités du club. Les photographies sont
-                publiées avec l’accord des personnes concernées. La base
-                juridique est leur consentement pour les portraits et
-                l’intérêt légitime du club pour les informations sportives
-                publiques ; les données d’équipe sont actualisées
-                périodiquement et les contenus sont retirés lorsqu’ils ne
-                sont plus utiles ou à jour.
+                présenter les activités du club. Les photographies sont publiées
+                avec l’accord des personnes concernées. La base juridique est
+                leur consentement pour les portraits et l’intérêt légitime du
+                club pour les informations sportives publiques ; les données
+                d’équipe sont actualisées périodiquement et les contenus sont
+                retirés lorsqu’ils ne sont plus utiles ou à jour.
               </li>
             </ul>
             <p>
-              Le site ne propose ni inscription à une newsletter ni collecte
-              de données de paiement. Ne transmettez pas de données sensibles
-              dans le formulaire de contact.
+              Le site ne propose ni inscription à une newsletter ni collecte de
+              données de paiement. Ne transmettez pas de données sensibles dans
+              le formulaire de contact.
             </p>
           </section>
           <section>
             <h2>Destinataires et prestataires</h2>
             <p>
               Les données sont accessibles aux personnes habilitées du club et
-              aux prestataires nécessaires au fonctionnement du site :
-              Web3Forms pour transmettre les messages, Google Firebase pour
+              aux prestataires nécessaires au fonctionnement du site : Web3Forms
+              pour transmettre les messages, Google Firebase pour
               l’authentification webmaster et les contenus administrés,
               Cloudinary pour héberger les photos des actualités et du bureau,
               GitHub Pages pour l’hébergement du site et Cloudflare pour la
@@ -3262,19 +3329,56 @@ function PrivacyPolicy() {
             <p>
               Les services peuvent traiter des données hors de l’Espace
               économique européen. Les modalités et garanties applicables sont
-              décrites dans les informations de confidentialité des
-              prestataires :{" "}
-              <a href="https://web3forms.com/privacy" target="_blank" rel="noreferrer">Web3Forms</a>
+              décrites dans les informations de confidentialité des prestataires
+              :{" "}
+              <a
+                href="https://web3forms.com/privacy"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Web3Forms
+              </a>
               {" · "}
-              <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noreferrer">Firebase / Google</a>
+              <a
+                href="https://firebase.google.com/support/privacy"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Firebase / Google
+              </a>
               {" · "}
-              <a href="https://cloudinary.com/privacy" target="_blank" rel="noreferrer">Cloudinary</a>
+              <a
+                href="https://cloudinary.com/privacy"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Cloudinary
+              </a>
               {" · "}
-              <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noreferrer">GitHub</a>
+              <a
+                href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement"
+                target="_blank"
+                rel="noreferrer"
+              >
+                GitHub
+              </a>
               {" · "}
-              <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noreferrer">Cloudflare</a>
+              <a
+                href="https://www.cloudflare.com/privacypolicy/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Cloudflare
+              </a>
               {" · "}
-              <a href="https://unsplash.com/privacy" target="_blank" rel="noreferrer">Unsplash</a>.
+              <a
+                href="https://unsplash.com/privacy"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Unsplash
+              </a>
+              .
             </p>
           </section>
           <section>
@@ -3283,13 +3387,13 @@ function PrivacyPolicy() {
               Le club supprime les messages de contact une fois la demande
               traitée. Web3Forms indique toutefois conserver les soumissions
               pendant une durée maximale de trois ans, sauf suppression
-              anticipée ou durée plus courte applicable à l’offre utilisée.
-              Les contenus du club sont conservés pendant leur publication ;
-              les données d’équipe sont remplacées ou supprimées lors des
+              anticipée ou durée plus courte applicable à l’offre utilisée. Les
+              contenus du club sont conservés pendant leur publication ; les
+              données d’équipe sont remplacées ou supprimées lors des
               synchronisations. Lorsqu’un portrait est retiré du site, le
               fichier correspondant sur Cloudinary doit aussi être supprimé
-              séparément. Les comptes webmaster sont conservés pendant la
-              durée de leur habilitation.
+              séparément. Les comptes webmaster sont conservés pendant la durée
+              de leur habilitation.
             </p>
             <p>
               Les données d’équipe proviennent de pages publiques FFBaD/ICBaD.
@@ -3302,9 +3406,9 @@ function PrivacyPolicy() {
           <section>
             <h2>Cookies et traceurs</h2>
             <p>
-              Le site n’intègre pas d’outil de mesure d’audience ni de publicité.
-              L’espace webmaster utilise une authentification et un stockage
-              technique nécessaires au maintien de la connexion. Les
+              Le site n’intègre pas d’outil de mesure d’audience ni de
+              publicité. L’espace webmaster utilise une authentification et un
+              stockage technique nécessaires au maintien de la connexion. Les
               prestataires d’hébergement et de sécurité peuvent également
               utiliser des traceurs strictement nécessaires à leur service.
             </p>
@@ -3323,9 +3427,13 @@ function PrivacyPolicy() {
               Adressez votre demande à{" "}
               <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a> ou
               par courrier au siège social indiqué dans les{" "}
-              <Link to="/mentions-legales">mentions légales</Link>. Vous
-              pouvez également adresser une réclamation à la{" "}
-              <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noreferrer">
+              <Link to="/mentions-legales">mentions légales</Link>. Vous pouvez
+              également adresser une réclamation à la{" "}
+              <a
+                href="https://www.cnil.fr/fr/plaintes"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Commission nationale de l’informatique et des libertés (CNIL)
               </a>
               .
@@ -3334,15 +3442,27 @@ function PrivacyPolicy() {
           <section>
             <h2>En savoir plus</h2>
             <p>
-              <a href="https://www.cnil.fr/fr/les-droits-pour-maitriser-vos-donnees-personnelles" target="_blank" rel="noreferrer">
+              <a
+                href="https://www.cnil.fr/fr/les-droits-pour-maitriser-vos-donnees-personnelles"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Vos droits sur les données personnelles — CNIL
               </a>
               {" · "}
-              <a href="https://eur-lex.europa.eu/eli/reg/2016/679/oj?locale=fr" target="_blank" rel="noreferrer">
+              <a
+                href="https://eur-lex.europa.eu/eli/reg/2016/679/oj?locale=fr"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Règlement général sur la protection des données (RGPD)
               </a>
               {" · "}
-              <a href="https://entreprendre.service-public.gouv.fr/vosdroits/F24270" target="_blank" rel="noreferrer">
+              <a
+                href="https://entreprendre.service-public.gouv.fr/vosdroits/F24270"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Protection des données personnelles — Service-Public.fr
               </a>
             </p>
@@ -3852,7 +3972,7 @@ function Webmaster() {
         ? ""
         : removeArticleImage
           ? ""
-          : editing?.image ?? "",
+          : (editing?.image ?? ""),
       content: String(form.get("content")),
     };
     try {
@@ -3876,8 +3996,7 @@ function Webmaster() {
       setArticlePhotoFile(null);
       setArticleCropSource(null);
       setRemoveArticleImage(false);
-      if (articlePhotoInputRef.current)
-        articlePhotoInputRef.current.value = "";
+      if (articlePhotoInputRef.current) articlePhotoInputRef.current.value = "";
       setNotice("Article enregistré.");
     } catch (saveError) {
       setError(
@@ -3912,15 +4031,13 @@ function Webmaster() {
     setArticlePhotoFile(null);
     setArticleCropSource(null);
     setRemoveArticleImage(true);
-    if (articlePhotoInputRef.current)
-      articlePhotoInputRef.current.value = "";
+    if (articlePhotoInputRef.current) articlePhotoInputRef.current.value = "";
   }
   function resetArticlePhoto() {
     setArticlePhotoFile(null);
     setArticleCropSource(null);
     setRemoveArticleImage(false);
-    if (articlePhotoInputRef.current)
-      articlePhotoInputRef.current.value = "";
+    if (articlePhotoInputRef.current) articlePhotoInputRef.current.value = "";
   }
   async function remove(id: string) {
     if (
@@ -4193,7 +4310,7 @@ function Webmaster() {
                             onClick={() => {
                               setEditing(item);
                               resetArticlePhoto();
-                              window.scrollTo({ top: 0, behavior: "smooth" });
+                              scrollToPageTop();
                             }}
                           >
                             Modifier
@@ -4725,19 +4842,39 @@ function UserManagement() {
 
 function NotFound() {
   const navigate = useNavigate();
+  const [redirectEnabled, setRedirectEnabled] = useState(true);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => navigate("/", { replace: true }), 5000);
+    if (!redirectEnabled) return;
+    const timeout = window.setTimeout(
+      () => navigate("/", { replace: true }),
+      5000,
+    );
     return () => window.clearTimeout(timeout);
-  }, [navigate]);
+  }, [navigate, redirectEnabled]);
 
   return (
     <section className="not-found">
       <h1>Cette page n’existe pas.</h1>
       <div className="not-found-redirect" role="status" aria-live="polite">
-        <span className="not-found-loader" aria-hidden="true" />
-        <p>Redirection vers l’accueil dans 5 secondes…</p>
+        {redirectEnabled && (
+          <span className="not-found-loader" aria-hidden="true" />
+        )}
+        <p>
+          {redirectEnabled
+            ? "Redirection vers l’accueil dans 5 secondes…"
+            : "Vous restez sur cette page."}
+        </p>
       </div>
+      {redirectEnabled && (
+        <button
+          className="button button-outline not-found-cancel"
+          type="button"
+          onClick={() => setRedirectEnabled(false)}
+        >
+          Désactiver la redirection automatique
+        </button>
+      )}
       <Link className="text-link" to="/">
         Retourner à l’accueil maintenant <ArrowRight />
       </Link>

@@ -24,7 +24,6 @@ html {
 }
 body {
   margin: 0;
-  min-width: 320px;
   font-family: "DM Sans", sans-serif;
   color: var(--text);
   background: var(--surface);
@@ -43,19 +42,32 @@ a {
   color: inherit;
   text-decoration: none;
 }
+p a,
+li a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
 button,
 input,
 textarea,
 select {
   font: inherit;
 }
+button {
+  min-height: 24px;
+}
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 3px solid #e39a5f;
+  outline: 3px solid var(--copper-dark);
   outline-offset: 3px;
+  box-shadow: 0 0 0 6px #fff;
+}
+h1:focus {
+  outline: none;
+  box-shadow: none;
 }
 .skip-link {
   position: fixed;
@@ -795,7 +807,7 @@ h2,
 .events-date-year {
   margin-top: 2px;
   color: #fff;
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1;
 }
 .events-name h3 {
@@ -938,6 +950,7 @@ h2,
 .team-sort-button {
   display: inline-flex;
   align-items: center;
+  min-height: 32px;
   gap: 7px;
   padding: 0;
   border: 0;
@@ -983,11 +996,11 @@ h2,
 }
 .team-ranking-national {
   color: #fff;
-  background: #f80220;
+  background: #b00018;
 }
 .team-ranking-regional {
   color: #fff;
-  background: #4a90e2;
+  background: #024a92;
 }
 .team-ranking-departmental {
   color: #000;
@@ -999,7 +1012,7 @@ h2,
 }
 .team-ranking-unclassified {
   color: #fff;
-  background: #9b9b9b;
+  background: #6b6b6b;
 }
 .team-match-score {
   font-weight: inherit;
@@ -1085,7 +1098,7 @@ h2,
   background: var(--navy);
 }
 .pagination-row button:disabled {
-  color: #767e86;
+  color: #626b73;
   cursor: not-allowed;
 }
 .pagination-row span {
@@ -1656,6 +1669,14 @@ h2,
   color: var(--muted);
   font-size: 14px;
 }
+.not-found-cancel {
+  cursor: pointer;
+}
+.not-found > .text-link {
+  display: flex;
+  width: fit-content;
+  margin: 16px auto 0;
+}
 .not-found-redirect p {
   margin: 0;
 }
@@ -1912,6 +1933,21 @@ h2,
   }
   .admin-item .delete-action {
     color: #ffaaa1;
+  }
+  .team-match-score-win {
+    color: #72d49a;
+  }
+  .team-match-score-loss {
+    color: #ff938b;
+  }
+  .team-match-score-draw {
+    color: #f5bd57;
+  }
+  .team-gender-female {
+    color: #ff8a95;
+  }
+  .team-gender-male {
+    color: #77baff;
   }
   .menu-toggle {
     color: var(--text);
