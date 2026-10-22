@@ -1,9 +1,64 @@
 // Runtime validation coverage for: public pages, navigation, and key interactions.
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import App from "../src/App";
+
+describe("configuration PWA", () => {
+  it("déclare une application installable et des icônes de taille requise", () => {
+    const manifest = JSON.parse(
+      readFileSync(resolve(process.cwd(), "public/manifest.webmanifest"), "utf8"),
+    ) as {
+      name: string;
+      start_url: string;
+      scope: string;
+      display: string;
+      icons: Array<{ src: string; sizes: string; purpose?: string }>;
+    };
+
+    expect(manifest.name).toBe("Cognac Badminton");
+    expect(manifest.start_url).toBe("./");
+    expect(manifest.scope).toBe("./");
+    expect(manifest.display).toBe("standalone");
+    expect(manifest.icons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sizes: "192x192" }),
+        expect.objectContaining({ sizes: "512x512", purpose: "any" }),
+      ]),
+    );
+    for (const icon of manifest.icons) {
+      const image = readFileSync(resolve(process.cwd(), "public", icon.src));
+      const declaredSize = Number(icon.sizes.split("x")[0]);
+      expect(image.readUInt32BE(16)).toBe(declaredSize);
+      expect(image.readUInt32BE(20)).toBe(declaredSize);
+    }
+  });
+
+  it("relie le manifeste, les icônes iOS et le service worker au bon chemin", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "src/main.tsx"),
+      "utf8",
+    );
+    const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
+
+    expect(source).toContain(
+      'register(`${import.meta.env.BASE_URL}sw.js`',
+    );
+    expect(html).toContain(
+      'rel="manifest" href="%BASE_URL%manifest.webmanifest"',
+    );
+    expect(html).toContain('rel="apple-touch-icon"');
+    expect(
+      readFileSync(resolve(process.cwd(), "public/sw.js"), "utf8"),
+    ).toContain('request.mode === "navigate"');
+    expect(
+      readFileSync(resolve(process.cwd(), "public/sw.js"), "utf8"),
+    ).toContain("cache.addAll");
+  });
+});
 
 function RouteLocation() {
   const location = useLocation();

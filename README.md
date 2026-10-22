@@ -15,6 +15,15 @@ Vérification de production : `npm run build`.
 
 `npm test` exécute les tests automatisés des parcours publics et interactions principales. Chaque build lance d’abord cette suite, puis vérifie TypeScript et génère le site. Les tests simulent Firebase et l’envoi du formulaire : ils ne nécessitent ni identifiants, ni accès réseau à ces services.
 
+## Installer le site comme application
+
+Le site est une PWA installable sur Android et iPhone, sans publication dans une boutique :
+
+- **Android** : ouvrir le site dans Chrome puis choisir **Installer l’application** (ou **Ajouter à l’écran d’accueil**).
+- **iPhone/iPad** : ouvrir le site dans Safari, toucher **Partager**, puis **Sur l’écran d’accueil**.
+
+L’installation nécessite le site publié en HTTPS. La page d’accueil, les fichiers nécessaires à l’application et les ressources du même domaine déjà consultées sont mises en cache pour permettre un affichage hors ligne ; les données dynamiques (Firebase, actualités à jour et formulaire de contact) nécessitent une connexion. Le service worker est activé uniquement dans les builds de production.
+
 ## Publier sur GitHub Pages
 
 Le workflow `.github/workflows/deploy-pages.yml` construit et publie le site à chaque push sur `main`.
