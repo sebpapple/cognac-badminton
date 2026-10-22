@@ -13,6 +13,8 @@ npm run dev
 
 Vérification de production : `npm run build`.
 
+`npm test` exécute les tests automatisés des parcours publics et interactions principales. Chaque build lance d’abord cette suite, puis vérifie TypeScript et génère le site. Les tests simulent Firebase et l’envoi du formulaire : ils ne nécessitent ni identifiants, ni accès réseau à ces services.
+
 ## Publier sur GitHub Pages
 
 Le workflow `.github/workflows/deploy-pages.yml` construit et publie le site à chaque push sur `main`.

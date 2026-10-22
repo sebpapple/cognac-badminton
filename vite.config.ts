@@ -6,7 +6,10 @@ export default defineConfig({
 	plugins: [react()],
 	server: {
 		watch: {
-			ignored: ['**/public/Logo_bleu_fond_rond (1).png'],
+			ignored: [
+				'**/public/Logo_bleu_fond_rond (1).png',
+				'**/.tsupgrader/**',
+			],
 		},
 	},
 	build: {

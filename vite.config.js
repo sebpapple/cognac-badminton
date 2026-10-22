@@ -3,6 +3,14 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
     base: process.env.VITE_BASE_PATH || '/',
     plugins: [react()],
+    server: {
+        watch: {
+            ignored: [
+                '**/public/Logo_bleu_fond_rond (1).png',
+                '**/.tsupgrader/**',
+            ],
+        },
+    },
     build: {
         rollupOptions: {
             output: {
