@@ -570,6 +570,25 @@ function Footer() {
   );
 }
 
+function getFallbackPageHeading(pathname: string): string {
+  if (pathname.startsWith("/actualites/")) return "Actualité indisponible";
+  if (/^\/equipes\/[^/]+$/.test(pathname)) return "Équipe";
+  if (pathname === "/webmaster/utilisateurs") return "Gérer les comptes";
+
+  const routeHeadings: Record<string, string> = {
+    "/bureau": "Le bureau",
+    "/contact": "Contact",
+    "/equipes": "Nos équipes",
+    "/evenements": "Les évènements du club",
+    "/horaires": "Horaires",
+    "/mentions-legales": "Mentions légales",
+    "/rgpd": "Données personnelles",
+    "/webmaster": "Espace webmaster",
+    "/actualites": "Actualités",
+  };
+  return routeHeadings[pathname] ?? "Page indisponible";
+}
+
 function PageFrame({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const previousPath = useRef(pathname);
@@ -577,34 +596,36 @@ function PageFrame({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const main = document.getElementById("contenu");
-    const headingElement = main?.querySelector("h1");
-    const headingMarkup = headingElement?.innerHTML.replace(
-      /<br\s*\/?>/gi,
-      " ",
-    );
-    const heading =
-      (
-        (headingMarkup
-          ? new DOMParser().parseFromString(headingMarkup, "text/html").body
-              .textContent
-          : null) ??
-        headingElement?.textContent ??
-        ""
-      )
-        .replace(/\s+/g, " ")
-        .trim() ||
-      (pathname.startsWith("/actualites/")
-        ? "Actualité indisponible"
-        : "Page indisponible");
+    const updatePageHeading = () => {
+      const headingElement = main?.querySelector("h1");
+      const headingMarkup = headingElement?.innerHTML.replace(
+        /<br\s*\/?>/gi,
+        " ",
+      );
+      const heading =
+        (
+          (headingMarkup
+            ? new DOMParser().parseFromString(headingMarkup, "text/html").body
+                .textContent
+            : null) ??
+          headingElement?.textContent ??
+          ""
+        )
+          .replace(/\s+/g, " ")
+          .trim() ||
+        getFallbackPageHeading(pathname);
 
-    const title =
-      pathname === "/"
-        ? "Cognac Badminton | Jouons collectif"
-        : `${heading} | Cognac Badminton`;
-    document.title = title;
-    main?.setAttribute("aria-label", heading);
-    setPageTitle(heading);
+      const title =
+        pathname === "/"
+          ? "Cognac Badminton | Jouons collectif"
+          : `${heading} | Cognac Badminton`;
+      document.title = title;
+      main?.setAttribute("aria-label", heading);
+      setPageTitle(heading);
+      return headingElement;
+    };
 
+    const headingElement = updatePageHeading();
     if (previousPath.current !== pathname) {
       if (headingElement) {
         headingElement.setAttribute("tabindex", "-1");
@@ -614,6 +635,15 @@ function PageFrame({ children }: { children: ReactNode }) {
       }
     }
     previousPath.current = pathname;
+
+    if (!main) return;
+    const headingObserver = new MutationObserver(updatePageHeading);
+    headingObserver.observe(main, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    return () => headingObserver.disconnect();
   }, [pathname]);
 
   return (

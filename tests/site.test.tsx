@@ -1,5 +1,5 @@
 // Runtime validation coverage for: public pages, navigation, and key interactions.
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
@@ -80,6 +80,27 @@ describe("navigation et accessibilité", () => {
 
     expect(screen.getByTestId("current-route")).toHaveTextContent(to);
     expect(screen.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+  });
+
+  it("donne un titre à la route équipe avant le chargement de ses données", () => {
+    renderAt("/equipes/equipe-1");
+
+    expect(document.title).toBe("Équipe | Cognac Badminton");
+    expect(document.title).not.toContain("Page indisponible");
+  });
+
+  it("actualise le titre quand le contenu asynchrone d’une page équipe arrive", async () => {
+    renderAt("/equipes/equipe-1");
+
+    act(() => {
+      const heading = document.createElement("h1");
+      heading.textContent = "Équipe 1";
+      document.getElementById("contenu")?.replaceChildren(heading);
+    });
+
+    await waitFor(() => {
+      expect(document.title).toBe("Équipe 1 | Cognac Badminton");
+    });
   });
 });
 
