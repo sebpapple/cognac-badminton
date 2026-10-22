@@ -15,6 +15,97 @@ service cloud.firestore {
           && get(/databases/$(database)/documents/userRoles/$(request.auth.uid)).data.role == 'editor');
     }
 
+    function validClubInformation(data) {
+      return data.keys().hasAll([
+          'email', 'postalAddress', 'city', 'department',
+          'facebookUrl', 'instagramUrl', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'email', 'postalAddress', 'city', 'department',
+          'facebookUrl', 'instagramUrl', 'updatedAt'
+        ])
+        && data.email is string
+        && data.email.size() > 2
+        && data.email.size() <= 254
+        && data.email.matches('^[^ ]+@[^ ]+\\.[^ ]+$')
+        && data.postalAddress is string
+        && data.postalAddress.size() > 0
+        && data.postalAddress.size() <= 200
+        && data.city is string
+        && data.city.size() > 0
+        && data.city.size() <= 100
+        && data.department is string
+        && data.department.size() > 0
+        && data.department.size() <= 100
+        && data.facebookUrl is string
+        && data.facebookUrl.size() <= 2000
+        && (data.facebookUrl == '' || data.facebookUrl.matches('^https://[^ ]+$'))
+        && data.instagramUrl is string
+        && data.instagramUrl.size() <= 2000
+        && (data.instagramUrl == '' || data.instagramUrl.matches('^https://[^ ]+$'))
+        && data.updatedAt is timestamp;
+    }
+
+    function validHomePageContent(data) {
+      return data.keys().hasAll([
+          'heroImages', 'heroEyebrow', 'heroTitleAccent', 'heroTitle',
+          'heroPitch', 'heroLine', 'heroSlogan', 'introEyebrow', 'introText',
+          'storyEyebrow', 'storyTitle', 'storyAccent', 'storyParagraph1',
+          'storyParagraph2', 'storyImage', 'storyImageAlt', 'storyCaption',
+          'valuesEyebrow', 'valuesTitle', 'valuesAccent', 'value1Title',
+          'value1Description', 'value2Title', 'value2Description',
+          'value3Title', 'value3Description', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'heroImages', 'heroEyebrow', 'heroTitleAccent', 'heroTitle',
+          'heroPitch', 'heroLine', 'heroSlogan', 'introEyebrow', 'introText',
+          'storyEyebrow', 'storyTitle', 'storyAccent', 'storyParagraph1',
+          'storyParagraph2', 'storyImage', 'storyImageAlt', 'storyCaption',
+          'valuesEyebrow', 'valuesTitle', 'valuesAccent', 'value1Title',
+          'value1Description', 'value2Title', 'value2Description',
+          'value3Title', 'value3Description', 'updatedAt'
+        ])
+        && data.heroImages is list
+        && data.heroImages.size() == 3
+        && data.heroImages[0] is string
+        && data.heroImages[0].size() <= 2000
+        && data.heroImages[0].matches('^https://[^ ]+$')
+        && data.heroImages[1] is string
+        && data.heroImages[1].size() <= 2000
+        && data.heroImages[1].matches('^https://[^ ]+$')
+        && data.heroImages[2] is string
+        && data.heroImages[2].size() <= 2000
+        && data.heroImages[2].matches('^https://[^ ]+$')
+        && data.heroEyebrow is string && data.heroEyebrow.size() <= 120
+        && data.heroTitleAccent is string && data.heroTitleAccent.size() <= 80
+        && data.heroTitle is string && data.heroTitle.size() <= 100
+        && data.heroPitch is string && data.heroPitch.size() <= 200
+        && data.heroLine is string && data.heroLine.size() <= 200
+        && data.heroSlogan is string && data.heroSlogan.size() <= 200
+        && data.introEyebrow is string && data.introEyebrow.size() <= 100
+        && data.introText is string && data.introText.size() <= 1000
+        && data.storyEyebrow is string && data.storyEyebrow.size() <= 100
+        && data.storyTitle is string && data.storyTitle.size() <= 100
+        && data.storyAccent is string && data.storyAccent.size() <= 100
+        && data.storyParagraph1 is string && data.storyParagraph1.size() <= 1500
+        && data.storyParagraph2 is string && data.storyParagraph2.size() <= 1500
+        && data.storyImage is string
+        && data.storyImage.size() <= 2000
+        && data.storyImage.matches('^https://[^ ]+$')
+        && data.storyImageAlt is string && data.storyImageAlt.size() <= 250
+        && data.storyCaption is string && data.storyCaption.size() <= 120
+        && data.valuesEyebrow is string && data.valuesEyebrow.size() <= 100
+        && data.valuesTitle is string && data.valuesTitle.size() <= 100
+        && data.valuesAccent is string && data.valuesAccent.size() <= 100
+        && data.value1Title is string && data.value1Title.size() <= 80
+        && data.value1Description is string && data.value1Description.size() <= 300
+        && data.value2Title is string && data.value2Title.size() <= 80
+        && data.value2Description is string && data.value2Description.size() <= 300
+        && data.value3Title is string && data.value3Title.size() <= 80
+        && data.value3Description is string && data.value3Description.size() <= 300
+        && data.updatedAt is timestamp;
+    }
+
     match /userRoles/{userId} {
       allow get: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow list: if isAdmin();
@@ -52,9 +143,12 @@ service cloud.firestore {
     }
 
     match /siteContent/{contentId} {
-      allow read: if contentId == 'schedule';
-      allow create, update: if contentId == 'schedule'
-        && canWriteArticles()
+      allow read: if contentId in [
+        'horaires', 'schedule', 'clubInformation', 'homePage'
+      ];
+      allow create, update: if (
+          contentId in ['horaires', 'schedule']
+          && canWriteArticles()
         && request.resource.data.keys().hasAll([
           'adultVenue', 'adultAddress', 'adultSlots',
           'youthVenue', 'youthAddress', 'youthNote', 'youthSlots',
@@ -83,7 +177,16 @@ service cloud.firestore {
         && request.resource.data.youthNote.size() <= 300
         && request.resource.data.youthSlots is list
         && request.resource.data.youthSlots.size() <= 30
-        && request.resource.data.updatedAt is timestamp;
+        && request.resource.data.updatedAt is timestamp
+        ) || (
+          contentId == 'clubInformation'
+          && isAdmin()
+          && validClubInformation(request.resource.data)
+        ) || (
+          contentId == 'homePage'
+          && isAdmin()
+          && validHomePageContent(request.resource.data)
+        );
       allow delete: if false;
     }
 

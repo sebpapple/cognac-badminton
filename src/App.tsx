@@ -1,10 +1,12 @@
 import {
+  createContext,
   CSSProperties,
   FormEvent,
   Fragment,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
   ReactNode,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -67,6 +69,12 @@ import {
   X,
 } from "lucide-react";
 import { Article, ClubEvent, demoArticles, demoEvents } from "./data";
+import {
+  ClubInformation,
+  defaultClubInformation,
+  defaultHomePageContent,
+  HomePageContent,
+} from "./siteContent";
 import { TeamData, TeamSource } from "./teamSources";
 import { auth, db, firebaseEnabled } from "./firebase";
 
@@ -84,23 +92,30 @@ type BoardMember = {
   photoUrl: string;
   order?: number;
 };
-type ScheduleSlot = {
+type HorairesSlot = {
   day: string;
   time: string;
   activity: string;
 };
-type WeeklySchedule = {
+type HorairesHebdomadaires = {
   adultVenue: string;
   adultAddress: string;
-  adultSlots: ScheduleSlot[];
+  adultSlots: HorairesSlot[];
   youthVenue: string;
   youthAddress: string;
   youthNote: string;
-  youthSlots: ScheduleSlot[];
+  youthSlots: HorairesSlot[];
 };
-type WebmasterTab = "articles" | "board" | "events" | "schedule" | "teams";
+type WebmasterTab =
+  | "articles"
+  | "board"
+  | "events"
+  | "horaires"
+  | "club"
+  | "homepage"
+  | "teams";
 
-const defaultWeeklySchedule: WeeklySchedule = {
+const defaultHorairesHebdomadaires: HorairesHebdomadaires = {
   adultVenue: "Adultes · Gymnase Beaulieu",
   adultAddress: "Rue du Port, Cognac",
   adultSlots: [
@@ -134,7 +149,7 @@ const defaultWeeklySchedule: WeeklySchedule = {
   youthVenue: "Jeunes · Gymnase Jean Monnet",
   youthAddress: "Collège Jean Monnet · Cognac · École Française de Badminton",
   youthNote:
-    "Au-delà de 17 ans, les joueurs sont accueillis sur les créneaux adultes.",
+    "Au-delà de 17 ans, les joueurs sont accueillis aux horaires adultes.",
   youthSlots: [
     { day: "Mardi", time: "18h15–19h45", activity: "5–10 ans" },
     { day: "Jeudi", time: "18h15–19h45", activity: "11–17 ans" },
@@ -192,6 +207,13 @@ function formatEventDate(
   );
 }
 
+function renderInlineEmphasis(text: string): ReactNode {
+  return text.split(/(<em>.*?<\/em>)/g).map((segment, index) => {
+    const match = segment.match(/^<em>(.*?)<\/em>$/);
+    return match ? <em key={index}>{match[1]}</em> : segment;
+  });
+}
+
 function useEvents() {
   const [events, setEvents] = useState<ClubEvent[]>(db ? [] : demoEvents);
   const [error, setError] = useState("");
@@ -228,14 +250,127 @@ function useEvents() {
   return { events, error, loading };
 }
 
-const gallery = [
-  "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=1800&q=90",
-  "https://images.unsplash.com/photo-1599474924187-334a4ae5bd3c?auto=format&fit=crop&w=1800&q=90",
-  "https://images.unsplash.com/photo-1623998021722-b934f73081df?auto=format&fit=crop&w=1800&q=90",
-];
 const web3FormsAccessKey = "55d8ccc0-bc5f-4bcf-af5a-452539af78ff";
 const cloudinaryCloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const cloudinaryUploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+
+type SiteContentState = {
+  clubInformation: ClubInformation;
+  homePageContent: HomePageContent;
+  clubError: string;
+  homePageError: string;
+  loading: boolean;
+};
+
+const SiteContentContext = createContext<SiteContentState | null>(null);
+
+function useSiteContent() {
+  const content = useContext(SiteContentContext);
+  if (!content) throw new Error("SiteContentProvider is missing.");
+  return content;
+}
+
+function mergeStringFields<T extends object>(
+  defaults: T,
+  data: Record<string, unknown>,
+): T {
+  const result = { ...defaults } as T;
+  const values = data as Partial<Record<keyof T, unknown>>;
+  for (const key of Object.keys(defaults) as Array<keyof T>) {
+    if (typeof values[key] === "string") {
+      result[key] = values[key] as T[typeof key];
+    }
+  }
+  return result;
+}
+
+function SiteContentProvider({ children }: { children: ReactNode }) {
+  const [clubInformation, setClubInformation] =
+    useState(defaultClubInformation);
+  const [homePageContent, setHomePageContent] = useState(defaultHomePageContent);
+  const [clubError, setClubError] = useState("");
+  const [homePageError, setHomePageError] = useState("");
+  const [clubLoaded, setClubLoaded] = useState(!db);
+  const [homePageLoaded, setHomePageLoaded] = useState(!db);
+
+  useEffect(() => {
+    if (!db) return;
+    const firestore = db;
+    const unsubscribeClub = onSnapshot(
+      doc(firestore, "siteContent", "clubInformation"),
+      (snapshot) => {
+        setClubInformation(
+          snapshot.exists()
+            ? mergeStringFields(defaultClubInformation, snapshot.data())
+            : defaultClubInformation,
+        );
+        setClubError("");
+        setClubLoaded(true);
+      },
+      () => {
+        setClubError(
+          "Les informations du club n’ont pas pu être chargées. Les valeurs par défaut sont affichées.",
+        );
+        setClubLoaded(true);
+      },
+    );
+    const unsubscribeHomePage = onSnapshot(
+      doc(firestore, "siteContent", "homePage"),
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setHomePageContent(defaultHomePageContent);
+        } else {
+          const data = snapshot.data();
+          const { heroImages: defaultImages, ...defaultCopy } =
+            defaultHomePageContent;
+          const content = mergeStringFields(defaultCopy, data);
+          if (content.heroPitch === "Le club qui a du corps et du cœur.") {
+            content.heroPitch = defaultHomePageContent.heroPitch;
+          }
+          if (content.heroLine === "On lève le volant ensemble.") {
+            content.heroLine = defaultHomePageContent.heroLine;
+          }
+          const images = data.heroImages;
+          setHomePageContent({
+            ...content,
+            heroImages:
+              Array.isArray(images) &&
+              images.length === defaultImages.length &&
+              images.every((image: unknown) => typeof image === "string")
+                ? images
+                : defaultImages,
+          });
+        }
+        setHomePageError("");
+        setHomePageLoaded(true);
+      },
+      () => {
+        setHomePageError(
+          "Le contenu de l’accueil n’a pas pu être chargé. Les valeurs par défaut sont affichées.",
+        );
+        setHomePageLoaded(true);
+      },
+    );
+    return () => {
+      unsubscribeClub();
+      unsubscribeHomePage();
+    };
+  }, []);
+
+  return (
+    <SiteContentContext.Provider
+      value={{
+        clubInformation,
+        homePageContent,
+        clubError,
+        homePageError,
+        loading: !clubLoaded || !homePageLoaded,
+      }}
+    >
+      {children}
+    </SiteContentContext.Provider>
+  );
+}
 
 async function resolveSiteRole(
   currentUser: User,
@@ -339,7 +474,7 @@ function Header() {
             ["Accueil", "/"],
             ["Actualités", "/actualites"],
             ["Évènements", "/evenements"],
-            ["Créneaux", "/creneaux"],
+            ["Horaires", "/horaires"],
             ["Les équipes", "/equipes"],
             ["Le bureau", "/bureau"],
             ["Contact", "/contact"],
@@ -362,8 +497,17 @@ function Header() {
 }
 
 function Footer() {
+  const { clubInformation, clubError, homePageError } = useSiteContent();
   return (
     <footer className="site-footer">
+      {(clubError || homePageError) && (
+        <div className="container">
+          <p className="site-content-warning" role="status">
+            Certaines informations du site utilisent leurs valeurs par défaut.
+            Le webmaster peut vérifier leur configuration.
+          </p>
+        </div>
+      )}
       <div className="container footer-main">
         <div>
           <Brand />
@@ -375,32 +519,37 @@ function Footer() {
           <span className="footer-label">Explorer</span>
           <Link to="/actualites">Actualités</Link>
           <Link to="/evenements">Évènements</Link>
-          <Link to="/creneaux">Créneaux</Link>
+          <Link to="/horaires">Horaires</Link>
           <Link to="/bureau">Le bureau</Link>
           <Link to="/contact">Nous contacter</Link>
         </div>
         <div>
           <span className="footer-label">Nous trouver</span>
           <span className="footer-location">
-            <MapPin size={16} /> Cognac · Charente
+            <MapPin size={16} /> {clubInformation.city} ·{" "}
+            {clubInformation.department}
           </span>
-          <a href="mailto:badcognac@gmail.com">
-            <Mail size={16} /> badcognac@gmail.com
+          <a href={`mailto:${clubInformation.email}`}>
+            <Mail size={16} /> {clubInformation.email}
           </a>
-          <a
-            href="https://www.facebook.com/groups/cognac.badminton"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Facebook size={16} /> Facebook
-          </a>
-          <a
-            href="https://www.instagram.com/cognac_badminton/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Instagram size={16} /> Instagram
-          </a>
+          {clubInformation.facebookUrl && (
+            <a
+              href={clubInformation.facebookUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Facebook size={16} /> Facebook
+            </a>
+          )}
+          {clubInformation.instagramUrl && (
+            <a
+              href={clubInformation.instagramUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Instagram size={16} /> Instagram
+            </a>
+          )}
         </div>
         <div className="footer-stamp">
           <span>COGNAC</span>
@@ -682,13 +831,14 @@ function NewsCard({ article }: { article: Article }) {
 
 function Home() {
   const [slide, setSlide] = useState(0);
+  const { homePageContent } = useSiteContent();
   const news = useArticles().slice(0, 3);
   return (
     <>
       <section
         className="hero"
         style={{
-          backgroundImage: `linear-gradient(90deg, rgba(18,31,46,.92), rgba(18,31,46,.66) 48%, rgba(18,31,46,.13)), url("${gallery[slide]}")`,
+          backgroundImage: `linear-gradient(90deg, rgba(18,31,46,.92), rgba(18,31,46,.66) 48%, rgba(18,31,46,.13)), url(${JSON.stringify(homePageContent.heroImages[slide])})`,
         }}
         aria-label="Présentation du Cognac Badminton"
       >
@@ -699,46 +849,58 @@ function Home() {
             alt="Logo Cognac Badminton"
           />
           <span className="eyebrow light">
-            <span className="eyebrow-dot" /> CLUB DE BADMINTON · COGNAC
+            <span className="eyebrow-dot" /> {homePageContent.heroEyebrow}
           </span>
           <h1>
-            <em>Cognac</em> Badminton
+            <em>{homePageContent.heroTitleAccent}</em>{" "}
+            {homePageContent.heroTitle}
             <br />
           </h1>
           <p>
-            Le club qui a du <em>corps</em> et du <em>cœur</em>.<br />
-            On lève le volant <em>ensemble</em>.<br />
-            <em>Cognac Badminton, ça se déguste en équipe.</em>
+            {renderInlineEmphasis(homePageContent.heroPitch)}
+            <br />
+            {renderInlineEmphasis(homePageContent.heroLine)}
+            <br />
+            <em>{homePageContent.heroSlogan}</em>
           </p>
           <div className="hero-actions">
             <Link className="button button-copper" to="/contact#inscription">
               Découvrir le club <ArrowUpRight size={17} />
             </Link>
-            <Link className="button button-quiet" to="/creneaux">
-              <Clock3 size={17} /> Voir les créneaux
+            <Link className="button button-quiet" to="/horaires">
+              <Clock3 size={17} /> Voir les horaires
             </Link>
           </div>
         </div>
         <div className="hero-index" aria-hidden="true">
           <span>0{slide + 1}</span>
           <span className="hero-index-line" />
-          03
+          {String(homePageContent.heroImages.length).padStart(2, "0")}
         </div>
         <span className="visually-hidden" aria-live="polite" aria-atomic="true">
-          Photo {slide + 1} sur {gallery.length}
+          Photo {slide + 1} sur {homePageContent.heroImages.length}
         </span>
         <div className="hero-controls">
           <button
             aria-label="Photo précédente"
             onClick={() =>
-              setSlide((slide + gallery.length - 1) % gallery.length)
+              setSlide(
+                (currentSlide) =>
+                  (currentSlide + homePageContent.heroImages.length - 1) %
+                  homePageContent.heroImages.length,
+              )
             }
           >
             <ChevronLeft />
           </button>
           <button
             aria-label="Photo suivante"
-            onClick={() => setSlide((slide + 1) % gallery.length)}
+            onClick={() =>
+              setSlide(
+                (currentSlide) =>
+                  (currentSlide + 1) % homePageContent.heroImages.length,
+              )
+            }
           >
             <ChevronRight />
           </button>
@@ -749,12 +911,9 @@ function Home() {
       </section>
       <section id="club-intro" className="intro-band">
         <div className="container intro-grid">
-          <span className="eyebrow">LE CLUB EN BREF</span>
+          <span className="eyebrow">{homePageContent.introEyebrow}</span>
           <p>
-            Un filet, quelques volants et l’envie de jouer.{" "}
-            <strong>Le Cognac Badminton rassemble</strong> les passionnés de
-            tous âges et de tous niveaux autour d’un sport aussi vif que
-            convivial.
+            {homePageContent.introText}
           </p>
           <Link className="text-link" to="/bureau">
             Rencontrer le club <ArrowRight size={15} />
@@ -765,28 +924,20 @@ function Home() {
         <div className="container story-grid">
           <div className="story-photo">
             <img
-              src={gallery[0]}
-              alt="Terrain de badminton prêt pour une partie"
+              src={homePageContent.storyImage}
+              alt={homePageContent.storyImageAlt}
             />
-            <span className="photo-caption">LE PLAISIR DU JEU, ENSEMBLE</span>
+            <span className="photo-caption">{homePageContent.storyCaption}</span>
           </div>
           <div className="story-copy">
-            <span className="eyebrow">NOTRE ESPRIT</span>
+            <span className="eyebrow">{homePageContent.storyEyebrow}</span>
             <h2>
-              Le bon match,
+              {homePageContent.storyTitle}
               <br />
-              <em>c’est celui qu’on partage.</em>
+              <em>{homePageContent.storyAccent}</em>
             </h2>
-            <p>
-              Le Cognac Badminton fait vivre le badminton au cœur de la
-              Charente. Le club rassemble des joueurs curieux, des compétiteurs
-              et des familles autour d’une même envie : se retrouver sur les
-              terrains.
-            </p>
-            <p>
-              Son histoire s’écrit avec ses bénévoles, ses joueurs et ses
-              partenaires. Envie d’en faire partie ? Venez découvrir une séance.
-            </p>
+            <p>{homePageContent.storyParagraph1}</p>
+            <p>{homePageContent.storyParagraph2}</p>
             <Link className="text-link" to="/contact#inscription">
               Faire un essai <ArrowRight size={16} />
             </Link>
@@ -796,27 +947,29 @@ function Home() {
       <section className="club-values">
         <div className="container values-grid">
           <div>
-            <span className="eyebrow light">UN CLUB POUR VOUS</span>
+            <span className="eyebrow light">
+              {homePageContent.valuesEyebrow}
+            </span>
             <h2>
-              Votre jeu.
+              {homePageContent.valuesTitle}
               <br />
-              <em>Votre rythme.</em>
+              <em>{homePageContent.valuesAccent}</em>
             </h2>
           </div>
           <div className="value-item">
             <span>01</span>
-            <h3>Loisir</h3>
-            <p>Du jeu libre et des rencontres dans une ambiance détendue.</p>
+            <h3>{homePageContent.value1Title}</h3>
+            <p>{homePageContent.value1Description}</p>
           </div>
           <div className="value-item">
             <span>02</span>
-            <h3>Progression</h3>
-            <p>Des séances encadrées pour apprendre et évoluer à son rythme.</p>
+            <h3>{homePageContent.value2Title}</h3>
+            <p>{homePageContent.value2Description}</p>
           </div>
           <div className="value-item">
             <span>03</span>
-            <h3>Compétition</h3>
-            <p>Des équipes et des tournois pour se challenger.</p>
+            <h3>{homePageContent.value3Title}</h3>
+            <p>{homePageContent.value3Description}</p>
           </div>
         </div>
       </section>
@@ -1201,34 +1354,40 @@ function EventsManager({ role }: { role: SiteRole }) {
   );
 }
 
-function useWeeklySchedule() {
-  const [schedule, setSchedule] = useState<WeeklySchedule | null>(
-    db ? null : defaultWeeklySchedule,
+function useHorairesHebdomadaires() {
+  const [horaires, setHoraires] = useState<HorairesHebdomadaires | null>(
+    db ? null : defaultHorairesHebdomadaires,
   );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(Boolean(db));
 
   useEffect(() => {
     if (!db) return;
+    const firestore = db;
     let active = true;
-    getDoc(doc(db, "siteContent", "schedule"))
-      .then((snapshot) => {
+    getDoc(doc(firestore, "siteContent", "horaires"))
+      .then(async (snapshot) => {
         if (!active) return;
-        if (!snapshot.exists()) {
-          setSchedule(defaultWeeklySchedule);
+        const legacySnapshot = snapshot.exists()
+          ? null
+          : await getDoc(doc(firestore, "siteContent", "schedule"));
+        if (!active) return;
+        const dataSnapshot = snapshot.exists() ? snapshot : legacySnapshot;
+        if (!dataSnapshot?.exists()) {
+          setHoraires(defaultHorairesHebdomadaires);
           return;
         }
-        const data = snapshot.data();
-        setSchedule({
-          ...defaultWeeklySchedule,
+        const data = dataSnapshot.data();
+        setHoraires({
+          ...defaultHorairesHebdomadaires,
           ...data,
           adultSlots: Array.isArray(data.adultSlots)
             ? data.adultSlots
-            : defaultWeeklySchedule.adultSlots,
+            : defaultHorairesHebdomadaires.adultSlots,
           youthSlots: Array.isArray(data.youthSlots)
             ? data.youthSlots
-            : defaultWeeklySchedule.youthSlots,
-        } as WeeklySchedule);
+            : defaultHorairesHebdomadaires.youthSlots,
+        } as HorairesHebdomadaires);
       })
       .catch(() => {
         if (active)
@@ -1242,22 +1401,22 @@ function useWeeklySchedule() {
     };
   }, []);
 
-  return { schedule, error, loading };
+  return { horaires, error, loading };
 }
 
-function ScheduleTable({
+function HorairesTable({
   title,
   thirdColumnLabel,
   slots,
 }: {
   title: string;
   thirdColumnLabel: string;
-  slots: ScheduleSlot[];
+  slots: HorairesSlot[];
 }) {
   const seenDays = new Set<string>();
   return (
-    <div className="schedule-table" role="table" aria-label={title}>
-      <div className="schedule-line schedule-heading" role="row">
+    <div className="horaires-table" role="table" aria-label={title}>
+      <div className="horaires-line horaires-heading" role="row">
         <span role="columnheader">Jour</span>
         <span role="columnheader">Horaires</span>
         <span role="columnheader">{thirdColumnLabel}</span>
@@ -1268,7 +1427,7 @@ function ScheduleTable({
         if (normalizedDay) seenDays.add(normalizedDay);
         return (
           <div
-            className="schedule-line"
+            className="horaires-line"
             role="row"
             key={`${slot.day}-${index}`}
           >
@@ -1284,28 +1443,28 @@ function ScheduleTable({
   );
 }
 
-function SchedulePage() {
-  const { schedule, error, loading } = useWeeklySchedule();
+function HorairesPage() {
+  const { horaires, error, loading } = useHorairesHebdomadaires();
   return (
     <>
       <PageIntro
         eyebrow="COGNAC BADMINTON · HORAIRES"
         title={
           <>
-            Trouvez votre
+            Trouvez vos
             <br />
-            <em>créneau de jeu.</em>
+            <em>horaires de jeu.</em>
           </>
         }
         description="Retrouvez les horaires hebdomadaires des séances adultes et jeunes ainsi que les gymnases."
       />
-      <section className="section schedule-page">
+      <section className="section horaires-page">
         <div className="container">
           <div className="section-row">
             <SectionHead
-              eyebrow="TROUVEZ VOTRE CRÉNEAU"
+              eyebrow="HORAIRES DES SÉANCES"
               title="On se retrouve au gymnase"
-              copy="Le club est labellisé École Française de Badminton. Deux entraînements jeunes sont proposés chaque semaine aux 5–17 ans ; au-delà de 17 ans, les joueurs rejoignent les créneaux adultes."
+              copy="Le club est labellisé École Française de Badminton. Deux entraînements jeunes sont proposés chaque semaine aux 5–17 ans ; au-delà de 17 ans, les joueurs rejoignent les horaires adultes."
             />
             <Clock3 className="section-icon" aria-hidden="true" />
           </div>
@@ -1317,33 +1476,33 @@ function SchedulePage() {
             <p className="form-error" role="alert">
               {error}
             </p>
-          ) : schedule ? (
-            <div className="schedule-groups">
+          ) : horaires ? (
+            <div className="horaires-groups">
               <section
-                className="schedule-venue"
+                className="horaires-venue"
                 aria-labelledby="adultes-heading"
               >
-                <h3 id="adultes-heading">{schedule.adultVenue}</h3>
-                <p className="venue-address">{schedule.adultAddress}</p>
-                <ScheduleTable
+                <h3 id="adultes-heading">{horaires.adultVenue}</h3>
+                <p className="venue-address">{horaires.adultAddress}</p>
+                <HorairesTable
                   title="adultes · Beaulieu"
                   thirdColumnLabel="Séance"
-                  slots={schedule.adultSlots}
+                  slots={horaires.adultSlots}
                 />
               </section>
               <section
-                className="schedule-venue"
+                className="horaires-venue"
                 aria-labelledby="jeunes-heading"
               >
-                <h3 id="jeunes-heading">{schedule.youthVenue}</h3>
-                <p className="venue-address">{schedule.youthAddress}</p>
-                <ScheduleTable
+                <h3 id="jeunes-heading">{horaires.youthVenue}</h3>
+                <p className="venue-address">{horaires.youthAddress}</p>
+                <HorairesTable
                   title="jeunes · Jean Monnet"
                   thirdColumnLabel="Âge"
-                  slots={schedule.youthSlots}
+                  slots={horaires.youthSlots}
                 />
-                {schedule.youthNote && (
-                  <p className="schedule-footnote">{schedule.youthNote}</p>
+                {horaires.youthNote && (
+                  <p className="horaires-footnote">{horaires.youthNote}</p>
                 )}
               </section>
             </div>
@@ -2971,6 +3130,12 @@ function BoardMembersManager() {
 }
 
 function Contact() {
+  const { clubInformation } = useSiteContent();
+  const {
+    horaires,
+    error: horairesError,
+    loading: horairesLoading,
+  } = useHorairesHebdomadaires();
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -3038,7 +3203,9 @@ function Contact() {
                 <span>CONTACT DIRECT</span>
                 <p>
                   Contactez-nous directement par courriel :{" "}
-                  <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a>{" "}
+                  <a href={`mailto:${clubInformation.email}`}>
+                    {clubInformation.email}
+                  </a>{" "}
                   ou utilisez ce formulaire.
                 </p>
               </div>
@@ -3047,11 +3214,19 @@ function Contact() {
               <MapPin />
               <div>
                 <span>GYMNASES</span>
-                <p>
-                  Adultes : Gymnase Beaulieu, Rue du Port à Cognac.
-                  <br />
-                  Jeunes : Gymnase Jean Monnet (Collège Jean Monnet).
-                </p>
+                {horairesLoading ? (
+                  <p role="status">Chargement des lieux d’entraînement…</p>
+                ) : horairesError ? (
+                  <p className="form-error" role="alert">
+                    {horairesError}
+                  </p>
+                ) : horaires ? (
+                  <p>
+                    {horaires.adultVenue}, {horaires.adultAddress}.
+                    <br />
+                    {horaires.youthVenue}, {horaires.youthAddress}.
+                  </p>
+                ) : null}
               </div>
             </div>
             <div className="contact-detail">
@@ -3060,8 +3235,8 @@ function Contact() {
                 <span>RENSEIGNEMENTS</span>
                 <p>
                   Vous pouvez aussi poser votre question directement sur place
-                  lors des horaires d'ouverture au Gymnase Beaulieu, Rue du Port
-                  à Cognac.
+                  lors des horaires d’ouverture aux gymnases indiqués dans les
+                  horaires du club.
                 </p>
               </div>
             </div>
@@ -3069,8 +3244,8 @@ function Contact() {
               <CalendarDays size={18} />
               <p>
                 Le club est labellisé École Française de Badminton. Deux
-                créneaux jeunes par semaine accueillent les 5–17 ans ; au-delà
-                de 17 ans, les joueurs sont admis sur les créneaux adultes.
+                entraînements jeunes par semaine accueillent les 5–17 ans ;
+                au-delà de 17 ans, les joueurs sont admis aux horaires adultes.
               </p>
             </div>
           </div>
@@ -3156,6 +3331,7 @@ function Contact() {
 }
 
 function LegalNotice() {
+  const { clubInformation } = useSiteContent();
   return (
     <>
       <PageIntro
@@ -3174,10 +3350,13 @@ function LegalNotice() {
             <p>
               <strong>Cognac Badminton (CB16)</strong>
               <br />
-              Siège social : Rue du Port, 16100 Cognac, France
+              Siège social : {clubInformation.postalAddress}{" "}
+              {clubInformation.city}, {clubInformation.department}, France
               <br />
               Courriel :{" "}
-              <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a>
+              <a href={`mailto:${clubInformation.email}`}>
+                {clubInformation.email}
+              </a>
               <br />
               Aucun numéro de téléphone public n’a été communiqué par le club.
             </p>
@@ -3251,6 +3430,7 @@ function LegalNotice() {
 }
 
 function PrivacyPolicy() {
+  const { clubInformation } = useSiteContent();
   return (
     <>
       <PageIntro
@@ -3270,10 +3450,14 @@ function PrivacyPolicy() {
           <section>
             <h2>Responsable du traitement</h2>
             <p>
-              Le responsable du traitement est Cognac Badminton (CB16), Rue du
-              Port, 16100 Cognac, France. Pour toute question ou demande
-              concernant vos données, écrivez à{" "}
-              <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a>.
+              Le responsable du traitement est Cognac Badminton (CB16),{" "}
+              {clubInformation.postalAddress} {clubInformation.city},{" "}
+              {clubInformation.department}, France. Pour toute question ou
+              demande concernant vos données, écrivez à{" "}
+              <a href={`mailto:${clubInformation.email}`}>
+                {clubInformation.email}
+              </a>
+              .
             </p>
           </section>
           <section>
@@ -3425,7 +3609,10 @@ function PrivacyPolicy() {
             </p>
             <p>
               Adressez votre demande à{" "}
-              <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a> ou
+              <a href={`mailto:${clubInformation.email}`}>
+                {clubInformation.email}
+              </a>{" "}
+              ou
               par courrier au siège social indiqué dans les{" "}
               <Link to="/mentions-legales">mentions légales</Link>. Vous pouvez
               également adresser une réclamation à la{" "}
@@ -3473,37 +3660,37 @@ function PrivacyPolicy() {
   );
 }
 
-function ScheduleManager() {
+function HorairesManager() {
   const {
-    schedule: loadedSchedule,
+    horaires: loadedHoraires,
     error: loadError,
     loading,
-  } = useWeeklySchedule();
-  const [schedule, setSchedule] = useState<WeeklySchedule>(
-    defaultWeeklySchedule,
+  } = useHorairesHebdomadaires();
+  const [horaires, setHoraires] = useState<HorairesHebdomadaires>(
+    defaultHorairesHebdomadaires,
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
-    if (loadedSchedule) setSchedule(loadedSchedule);
-  }, [loadedSchedule]);
+    if (loadedHoraires) setHoraires(loadedHoraires);
+  }, [loadedHoraires]);
 
-  function updateSchedule<K extends keyof WeeklySchedule>(
+  function updateHoraires<K extends keyof HorairesHebdomadaires>(
     key: K,
-    value: WeeklySchedule[K],
+    value: HorairesHebdomadaires[K],
   ) {
-    setSchedule((current) => ({ ...current, [key]: value }));
+    setHoraires((current) => ({ ...current, [key]: value }));
   }
 
   function updateSlot(
     group: "adultSlots" | "youthSlots",
     index: number,
-    key: keyof ScheduleSlot,
+    key: keyof HorairesSlot,
     value: string,
   ) {
-    setSchedule((current) => ({
+    setHoraires((current) => ({
       ...current,
       [group]: current[group].map((slot, slotIndex) =>
         slotIndex === index ? { ...slot, [key]: value } : slot,
@@ -3512,14 +3699,14 @@ function ScheduleManager() {
   }
 
   function addSlot(group: "adultSlots" | "youthSlots") {
-    setSchedule((current) => ({
+    setHoraires((current) => ({
       ...current,
       [group]: [...current[group], { day: "", time: "", activity: "" }],
     }));
   }
 
   function removeSlot(group: "adultSlots" | "youthSlots", index: number) {
-    setSchedule((current) => ({
+    setHoraires((current) => ({
       ...current,
       [group]: current[group].filter((_, slotIndex) => slotIndex !== index),
     }));
@@ -3535,8 +3722,8 @@ function ScheduleManager() {
     setNotice("");
     setSaving(true);
     try {
-      await setDoc(doc(db, "siteContent", "schedule"), {
-        ...schedule,
+      await setDoc(doc(db, "siteContent", "horaires"), {
+        ...horaires,
         updatedAt: serverTimestamp(),
       });
       setNotice("Les horaires ont été enregistrés.");
@@ -3553,10 +3740,10 @@ function ScheduleManager() {
 
   function renderSlots(group: "adultSlots" | "youthSlots", label: string) {
     return (
-      <fieldset className="schedule-editor-group">
+      <fieldset className="horaires-editor-group">
         <legend>{label}</legend>
-        {schedule[group].map((slot, index) => (
-          <div className="schedule-editor-row" key={`${group}-${index}`}>
+        {horaires[group].map((slot, index) => (
+          <div className="horaires-editor-row" key={`${group}-${index}`}>
             <label>
               Jour
               <input
@@ -3593,7 +3780,7 @@ function ScheduleManager() {
             <button
               type="button"
               className="delete-action"
-              aria-label={`Supprimer le créneau ${slot.day || index + 1}`}
+              aria-label={`Supprimer l’horaire ${slot.day || index + 1}`}
               onClick={() => removeSlot(group, index)}
             >
               Supprimer
@@ -3601,21 +3788,21 @@ function ScheduleManager() {
           </div>
         ))}
         <button
-          className="button button-outline schedule-add-slot"
+          className="button button-outline horaires-add-slot"
           type="button"
           onClick={() => addSlot(group)}
-          disabled={schedule[group].length >= 30}
+          disabled={horaires[group].length >= 30}
         >
-          Ajouter un créneau <ArrowRight size={16} />
+          Ajouter un horaire <ArrowRight size={16} />
         </button>
       </fieldset>
     );
   }
 
   return (
-    <section className="schedule-admin">
+    <section className="horaires-admin">
       <p className="board-order-help">
-        Modifiez les lieux et les créneaux ci-dessous. Les changements seront
+        Modifiez les lieux et les horaires ci-dessous. Les changements seront
         visibles sur la page publique après enregistrement.
       </p>
       {loadError && (
@@ -3644,9 +3831,9 @@ function ScheduleManager() {
             <label>
               Titre du lieu
               <input
-                value={schedule.adultVenue}
+                value={horaires.adultVenue}
                 onChange={(event) =>
-                  updateSchedule("adultVenue", event.target.value)
+                  updateHoraires("adultVenue", event.target.value)
                 }
                 maxLength={120}
                 required
@@ -3655,24 +3842,24 @@ function ScheduleManager() {
             <label>
               Adresse
               <input
-                value={schedule.adultAddress}
+                value={horaires.adultAddress}
                 onChange={(event) =>
-                  updateSchedule("adultAddress", event.target.value)
+                  updateHoraires("adultAddress", event.target.value)
                 }
                 maxLength={200}
                 required
               />
             </label>
           </div>
-          {renderSlots("adultSlots", "Créneaux adultes")}
+          {renderSlots("adultSlots", "Horaires adultes")}
           <h3>Horaires jeunes</h3>
           <div className="form-row">
             <label>
               Titre du lieu
               <input
-                value={schedule.youthVenue}
+                value={horaires.youthVenue}
                 onChange={(event) =>
-                  updateSchedule("youthVenue", event.target.value)
+                  updateHoraires("youthVenue", event.target.value)
                 }
                 maxLength={120}
                 required
@@ -3681,22 +3868,22 @@ function ScheduleManager() {
             <label>
               Adresse et informations
               <input
-                value={schedule.youthAddress}
+                value={horaires.youthAddress}
                 onChange={(event) =>
-                  updateSchedule("youthAddress", event.target.value)
+                  updateHoraires("youthAddress", event.target.value)
                 }
                 maxLength={200}
                 required
               />
             </label>
           </div>
-          {renderSlots("youthSlots", "Créneaux jeunes")}
+          {renderSlots("youthSlots", "Horaires jeunes")}
           <label>
             Note sous les horaires jeunes (facultatif)
             <input
-              value={schedule.youthNote}
+              value={horaires.youthNote}
               onChange={(event) =>
-                updateSchedule("youthNote", event.target.value)
+                updateHoraires("youthNote", event.target.value)
               }
               maxLength={300}
             />
@@ -3707,6 +3894,544 @@ function ScheduleManager() {
             disabled={saving || loading || Boolean(loadError)}
           >
             {saving ? "Enregistrement…" : "Enregistrer les horaires"}{" "}
+            <ArrowRight size={16} />
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function ClubInformationManager() {
+  const { clubInformation, clubError, loading } = useSiteContent();
+  const [draft, setDraft] = useState(clubInformation);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    if (!loading) setDraft(clubInformation);
+  }, [clubInformation, loading]);
+
+  function updateField<K extends keyof ClubInformation>(
+    key: K,
+    value: ClubInformation[K],
+  ) {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!db) {
+      setError("Firebase Firestore n’est pas configuré.");
+      return;
+    }
+    for (const [label, value] of [
+      ["Facebook", draft.facebookUrl],
+      ["Instagram", draft.instagramUrl],
+    ]) {
+      if (!value) continue;
+      try {
+        if (new URL(value).protocol !== "https:") throw new Error();
+      } catch {
+        setError(`L’adresse ${label} doit être une URL HTTPS valide.`);
+        return;
+      }
+    }
+    setError("");
+    setNotice("");
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "siteContent", "clubInformation"), {
+        ...draft,
+        updatedAt: serverTimestamp(),
+      });
+      setNotice("Les informations du club ont été enregistrées.");
+    } catch (saveError) {
+      setError(
+        isFirestorePermissionDenied(saveError)
+          ? "Enregistrement refusé. Vérifiez les règles Firestore et votre rôle webmaster."
+          : "Impossible d’enregistrer les informations du club.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="site-settings-admin">
+      <p className="board-order-help">
+        Ces coordonnées sont partagées entre le pied de page, la page Contact
+        et les pages légales. Les gymnases et leurs adresses se modifient dans
+        l’onglet « Horaires ».
+      </p>
+      {clubError && (
+        <p className="form-error" role="alert">
+          {clubError}
+        </p>
+      )}
+      {notice && (
+        <p className="form-success" role="status">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      {loading ? (
+        <p className="admin-empty" role="status">
+          Chargement des informations du club…
+        </p>
+      ) : (
+        <form className="admin-editor" onSubmit={save}>
+          <h3>Coordonnées publiques</h3>
+          <label>
+            Adresse e-mail du club
+            <input
+              type="email"
+              value={draft.email}
+              onChange={(event) => updateField("email", event.target.value)}
+              maxLength={254}
+              required
+            />
+          </label>
+          <label>
+            Adresse du siège social (sans ville ni département)
+            <input
+              value={draft.postalAddress}
+              onChange={(event) =>
+                updateField("postalAddress", event.target.value)
+              }
+              maxLength={200}
+              required
+            />
+          </label>
+          <div className="form-row">
+            <label>
+              Ville
+              <input
+                value={draft.city}
+                onChange={(event) => updateField("city", event.target.value)}
+                maxLength={100}
+                required
+              />
+            </label>
+            <label>
+              Département
+              <input
+                value={draft.department}
+                onChange={(event) =>
+                  updateField("department", event.target.value)
+                }
+                maxLength={100}
+                required
+              />
+            </label>
+          </div>
+          <h3>Réseaux sociaux</h3>
+          <label>
+            Page Facebook (facultatif)
+            <input
+              type="url"
+              value={draft.facebookUrl}
+              onChange={(event) =>
+                updateField("facebookUrl", event.target.value)
+              }
+              maxLength={2000}
+              placeholder="https://…"
+            />
+          </label>
+          <label>
+            Profil Instagram (facultatif)
+            <input
+              type="url"
+              value={draft.instagramUrl}
+              onChange={(event) =>
+                updateField("instagramUrl", event.target.value)
+              }
+              maxLength={2000}
+              placeholder="https://…"
+            />
+          </label>
+          <button className="button button-copper" type="submit" disabled={saving}>
+            {saving ? "Enregistrement…" : "Enregistrer les informations"}{" "}
+            <ArrowRight size={16} />
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function HomePageManager() {
+  const { homePageContent, homePageError, loading } = useSiteContent();
+  const [draft, setDraft] = useState(homePageContent);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    if (!loading) setDraft(homePageContent);
+  }, [homePageContent, loading]);
+
+  function updateField<K extends keyof HomePageContent>(
+    key: K,
+    value: HomePageContent[K],
+  ) {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  const valueFields = [
+    ["value1Title", "value1Description", "Première valeur"],
+    ["value2Title", "value2Description", "Deuxième valeur"],
+    ["value3Title", "value3Description", "Troisième valeur"],
+  ] as const;
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!db) {
+      setError("Firebase Firestore n’est pas configuré.");
+      return;
+    }
+    const imageUrls = [...draft.heroImages, draft.storyImage];
+    if (
+      imageUrls.some((imageUrl) => {
+        try {
+          return new URL(imageUrl).protocol !== "https:";
+        } catch {
+          return true;
+        }
+      })
+    ) {
+      setError("Les photos doivent utiliser des adresses HTTPS valides.");
+      return;
+    }
+    setError("");
+    setNotice("");
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "siteContent", "homePage"), {
+        ...draft,
+        updatedAt: serverTimestamp(),
+      });
+      setNotice("Le contenu de la page d’accueil a été enregistré.");
+    } catch (saveError) {
+      setError(
+        isFirestorePermissionDenied(saveError)
+          ? "Enregistrement refusé. Vérifiez les règles Firestore et votre rôle webmaster."
+          : "Impossible d’enregistrer le contenu de l’accueil.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="site-settings-admin">
+      <p className="board-order-help">
+        Modifiez les textes et les liens des photos de la page d’accueil. Les
+        photos doivent être accessibles publiquement en HTTPS ; vérifiez que le
+        club dispose des droits nécessaires avant publication.
+      </p>
+      {homePageError && (
+        <p className="form-error" role="alert">
+          {homePageError}
+        </p>
+      )}
+      {notice && (
+        <p className="form-success" role="status">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      {loading ? (
+        <p className="admin-empty" role="status">
+          Chargement du contenu de l’accueil…
+        </p>
+      ) : (
+        <form className="admin-editor" onSubmit={save}>
+          <h3>Photos du carrousel</h3>
+          {draft.heroImages.map((image, index) => (
+            <label key={`hero-image-${index}`}>
+              Adresse HTTPS de la photo {index + 1}
+              <input
+                type="url"
+                value={image}
+                onChange={(event) =>
+                  updateField(
+                    "heroImages",
+                    draft.heroImages.map((currentImage, imageIndex) =>
+                      imageIndex === index ? event.target.value : currentImage,
+                    ),
+                  )
+                }
+                maxLength={2000}
+                required
+              />
+              <img
+                className="site-content-image-preview"
+                src={image}
+                alt={`Aperçu de la photo ${index + 1} du carrousel`}
+                loading="lazy"
+              />
+            </label>
+          ))}
+          <h3>Accroche</h3>
+          <label>
+            Ligne de présentation au-dessus du titre
+            <input
+              value={draft.heroEyebrow}
+              onChange={(event) =>
+                updateField("heroEyebrow", event.target.value)
+              }
+              maxLength={120}
+              required
+            />
+          </label>
+          <div className="form-row">
+            <label>
+              Mot mis en évidence dans le titre
+              <input
+                value={draft.heroTitleAccent}
+                onChange={(event) =>
+                  updateField("heroTitleAccent", event.target.value)
+                }
+                maxLength={80}
+                required
+              />
+            </label>
+            <label>
+              Suite du titre
+              <input
+                value={draft.heroTitle}
+                onChange={(event) => updateField("heroTitle", event.target.value)}
+                maxLength={100}
+                required
+              />
+            </label>
+          </div>
+          <label>
+            Première phrase (entourez un passage avec &lt;em&gt; et &lt;/em&gt;
+            pour le mettre en évidence)
+            <input
+              value={draft.heroPitch}
+              onChange={(event) => updateField("heroPitch", event.target.value)}
+              maxLength={200}
+              required
+            />
+          </label>
+          <label>
+            Deuxième phrase (entourez un passage avec &lt;em&gt; et &lt;/em&gt;
+            pour le mettre en évidence)
+            <input
+              value={draft.heroLine}
+              onChange={(event) => updateField("heroLine", event.target.value)}
+              maxLength={200}
+              required
+            />
+          </label>
+          <label>
+            Phrase finale mise en évidence
+            <input
+              value={draft.heroSlogan}
+              onChange={(event) => updateField("heroSlogan", event.target.value)}
+              maxLength={200}
+              required
+            />
+          </label>
+          <h3>Présentation du club</h3>
+          <label>
+            Titre de la section d’introduction
+            <input
+              value={draft.introEyebrow}
+              onChange={(event) =>
+                updateField("introEyebrow", event.target.value)
+              }
+              maxLength={100}
+              required
+            />
+          </label>
+          <label>
+            Texte d’introduction
+            <textarea
+              value={draft.introText}
+              onChange={(event) => updateField("introText", event.target.value)}
+              maxLength={1000}
+              rows={3}
+              required
+            />
+          </label>
+          <label>
+            Titre de la présentation
+            <input
+              value={draft.storyEyebrow}
+              onChange={(event) =>
+                updateField("storyEyebrow", event.target.value)
+              }
+              maxLength={100}
+              required
+            />
+          </label>
+          <div className="form-row">
+            <label>
+              Première partie du titre
+              <input
+                value={draft.storyTitle}
+                onChange={(event) =>
+                  updateField("storyTitle", event.target.value)
+                }
+                maxLength={100}
+                required
+              />
+            </label>
+            <label>
+              Deuxième partie du titre
+              <input
+                value={draft.storyAccent}
+                onChange={(event) =>
+                  updateField("storyAccent", event.target.value)
+                }
+                maxLength={100}
+                required
+              />
+            </label>
+          </div>
+          <label>
+            Premier paragraphe
+            <textarea
+              value={draft.storyParagraph1}
+              onChange={(event) =>
+                updateField("storyParagraph1", event.target.value)
+              }
+              maxLength={1500}
+              rows={4}
+              required
+            />
+          </label>
+          <label>
+            Second paragraphe
+            <textarea
+              value={draft.storyParagraph2}
+              onChange={(event) =>
+                updateField("storyParagraph2", event.target.value)
+              }
+              maxLength={1500}
+              rows={4}
+              required
+            />
+          </label>
+          <label>
+            Adresse HTTPS de la photo de présentation
+            <input
+              type="url"
+              value={draft.storyImage}
+              onChange={(event) =>
+                updateField("storyImage", event.target.value)
+              }
+              maxLength={2000}
+              required
+            />
+            <img
+              className="site-content-image-preview"
+              src={draft.storyImage}
+              alt="Aperçu de la photo de présentation"
+              loading="lazy"
+            />
+          </label>
+          <label>
+            Description de la photo (accessibilité)
+            <input
+              value={draft.storyImageAlt}
+              onChange={(event) =>
+                updateField("storyImageAlt", event.target.value)
+              }
+              maxLength={250}
+              required
+            />
+          </label>
+          <label>
+            Légende de la photo
+            <input
+              value={draft.storyCaption}
+              onChange={(event) =>
+                updateField("storyCaption", event.target.value)
+              }
+              maxLength={120}
+              required
+            />
+          </label>
+          <h3>Valeurs du club</h3>
+          <label>
+            Petit titre de section
+            <input
+              value={draft.valuesEyebrow}
+              onChange={(event) =>
+                updateField("valuesEyebrow", event.target.value)
+              }
+              maxLength={100}
+              required
+            />
+          </label>
+          <div className="form-row">
+            <label>
+              Première partie du titre
+              <input
+                value={draft.valuesTitle}
+                onChange={(event) =>
+                  updateField("valuesTitle", event.target.value)
+                }
+                maxLength={100}
+                required
+              />
+            </label>
+            <label>
+              Deuxième partie du titre
+              <input
+                value={draft.valuesAccent}
+                onChange={(event) =>
+                  updateField("valuesAccent", event.target.value)
+                }
+                maxLength={100}
+                required
+              />
+            </label>
+          </div>
+          {valueFields.map(([titleKey, descriptionKey, label]) => (
+            <fieldset className="horaires-editor-group" key={titleKey}>
+              <legend>{label}</legend>
+              <label>
+                Titre
+                <input
+                  value={draft[titleKey]}
+                  onChange={(event) =>
+                    updateField(titleKey, event.target.value)
+                  }
+                  maxLength={80}
+                  required
+                />
+              </label>
+              <label>
+                Description
+                <textarea
+                  value={draft[descriptionKey]}
+                  onChange={(event) =>
+                    updateField(descriptionKey, event.target.value)
+                  }
+                  maxLength={300}
+                  rows={2}
+                  required
+                />
+              </label>
+            </fieldset>
+          ))}
+          <button className="button button-copper" type="submit" disabled={saving}>
+            {saving ? "Enregistrement…" : "Enregistrer la page d’accueil"}{" "}
             <ArrowRight size={16} />
           </button>
         </form>
@@ -4060,8 +4785,8 @@ function Webmaster() {
   function handleTabKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     const tabs: WebmasterTab[] =
       role === "admin"
-        ? ["articles", "board", "events", "schedule", "teams"]
-        : ["articles", "board", "events", "schedule"];
+        ? ["homepage", "articles", "events", "horaires", "teams", "board", "club"]
+        : ["articles", "events", "horaires", "board"];
     const currentIndex = tabs.indexOf(activeTab);
     const nextIndex =
       event.key === "ArrowRight"
@@ -4079,7 +4804,11 @@ function Webmaster() {
     document.getElementById(`webmaster-tab-${tabs[nextIndex]}`)?.focus();
   }
   useEffect(() => {
-    if (role !== "admin" && activeTab === "teams") setActiveTab("articles");
+    if (
+      role !== "admin" &&
+      ["teams", "club", "homepage"].includes(activeTab)
+    )
+      setActiveTab("articles");
   }, [activeTab, role]);
   return (
     <>
@@ -4210,6 +4939,20 @@ function Webmaster() {
                 aria-label="Sections de gestion"
                 onKeyDown={handleTabKeyDown}
               >
+                {role === "admin" && (
+                  <button
+                    id="webmaster-tab-homepage"
+                    className="webmaster-tab"
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === "homepage"}
+                    aria-controls="webmaster-homepage-panel"
+                    tabIndex={activeTab === "homepage" ? 0 : -1}
+                    onClick={() => setActiveTab("homepage")}
+                  >
+                    Page d’accueil
+                  </button>
+                )}
                 <button
                   id="webmaster-tab-articles"
                   className="webmaster-tab"
@@ -4221,18 +4964,6 @@ function Webmaster() {
                   onClick={() => setActiveTab("articles")}
                 >
                   Actualités
-                </button>
-                <button
-                  id="webmaster-tab-board"
-                  className="webmaster-tab"
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === "board"}
-                  aria-controls="webmaster-board-panel"
-                  tabIndex={activeTab === "board" ? 0 : -1}
-                  onClick={() => setActiveTab("board")}
-                >
-                  Membres du bureau
                 </button>
                 <button
                   id="webmaster-tab-events"
@@ -4247,14 +4978,14 @@ function Webmaster() {
                   Évènements
                 </button>
                 <button
-                  id="webmaster-tab-schedule"
+                  id="webmaster-tab-horaires"
                   className="webmaster-tab"
                   type="button"
                   role="tab"
-                  aria-selected={activeTab === "schedule"}
-                  aria-controls="webmaster-schedule-panel"
-                  tabIndex={activeTab === "schedule" ? 0 : -1}
-                  onClick={() => setActiveTab("schedule")}
+                  aria-selected={activeTab === "horaires"}
+                  aria-controls="webmaster-horaires-panel"
+                  tabIndex={activeTab === "horaires" ? 0 : -1}
+                  onClick={() => setActiveTab("horaires")}
                 >
                   Horaires
                 </button>
@@ -4270,6 +5001,32 @@ function Webmaster() {
                     onClick={() => setActiveTab("teams")}
                   >
                     Équipes
+                  </button>
+                )}
+                <button
+                  id="webmaster-tab-board"
+                  className="webmaster-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "board"}
+                  aria-controls="webmaster-board-panel"
+                  tabIndex={activeTab === "board" ? 0 : -1}
+                  onClick={() => setActiveTab("board")}
+                >
+                  Bureau
+                </button>
+                {role === "admin" && (
+                  <button
+                    id="webmaster-tab-club"
+                    className="webmaster-tab"
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === "club"}
+                    aria-controls="webmaster-club-panel"
+                    tabIndex={activeTab === "club" ? 0 : -1}
+                    onClick={() => setActiveTab("club")}
+                  >
+                    Informations du club
                   </button>
                 )}
               </div>
@@ -4489,14 +5246,32 @@ function Webmaster() {
                 >
                   <EventsManager role={role} />
                 </section>
-              ) : activeTab === "schedule" ? (
+              ) : activeTab === "horaires" ? (
                 <section
-                  id="webmaster-schedule-panel"
+                  id="webmaster-horaires-panel"
                   role="tabpanel"
-                  aria-labelledby="webmaster-tab-schedule"
+                  aria-labelledby="webmaster-tab-horaires"
                   className="webmaster-panel"
                 >
-                  <ScheduleManager />
+                  <HorairesManager />
+                </section>
+              ) : activeTab === "club" ? (
+                <section
+                  id="webmaster-club-panel"
+                  role="tabpanel"
+                  aria-labelledby="webmaster-tab-club"
+                  className="webmaster-panel"
+                >
+                  <ClubInformationManager />
+                </section>
+              ) : activeTab === "homepage" ? (
+                <section
+                  id="webmaster-homepage-panel"
+                  role="tabpanel"
+                  aria-labelledby="webmaster-tab-homepage"
+                  className="webmaster-panel"
+                >
+                  <HomePageManager />
                 </section>
               ) : role === "admin" ? (
                 <section
@@ -4884,24 +5659,30 @@ function NotFound() {
 
 export default function App() {
   return (
-    <PageFrame>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/bureau" element={<Club />} />
-        <Route path="/club" element={<Navigate to="/bureau" replace />} />
-        <Route path="/creneaux" element={<SchedulePage />} />
-        <Route path="/evenements" element={<EventsPage />} />
-        <Route path="/equipes" element={<TeamsOverview />} />
-        <Route path="/equipes/:teamId" element={<TeamDetails />} />
-        <Route path="/actualites" element={<News />} />
-        <Route path="/actualites/:id" element={<ArticleDetail />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/mentions-legales" element={<LegalNotice />} />
-        <Route path="/rgpd" element={<PrivacyPolicy />} />
-        <Route path="/webmaster" element={<Webmaster />} />
-        <Route path="/webmaster/utilisateurs" element={<UserManagement />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </PageFrame>
+    <SiteContentProvider>
+      <PageFrame>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/bureau" element={<Club />} />
+          <Route path="/club" element={<Navigate to="/bureau" replace />} />
+          <Route path="/horaires" element={<HorairesPage />} />
+          <Route
+            path="/creneaux"
+            element={<Navigate to="/horaires" replace />}
+          />
+          <Route path="/evenements" element={<EventsPage />} />
+          <Route path="/equipes" element={<TeamsOverview />} />
+          <Route path="/equipes/:teamId" element={<TeamDetails />} />
+          <Route path="/actualites" element={<News />} />
+          <Route path="/actualites/:id" element={<ArticleDetail />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/mentions-legales" element={<LegalNotice />} />
+          <Route path="/rgpd" element={<PrivacyPolicy />} />
+          <Route path="/webmaster" element={<Webmaster />} />
+          <Route path="/webmaster/utilisateurs" element={<UserManagement />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </PageFrame>
+    </SiteContentProvider>
   );
 }

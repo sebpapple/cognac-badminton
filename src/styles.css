@@ -309,6 +309,7 @@ h2,
 }
 .hero-controls {
   position: absolute;
+  z-index: 2;
   top: 50%;
   right: 36px;
   display: flex;
@@ -722,11 +723,11 @@ h2,
   margin-bottom: 13px;
   color: var(--copper-dark);
 }
-.schedule-groups {
+.horaires-groups {
   display: grid;
   gap: 40px;
 }
-.schedule-venue h3 {
+.horaires-venue h3 {
   margin: 0 0 5px;
   font-family: "Oswald", sans-serif;
   font-size: 27px;
@@ -736,10 +737,10 @@ h2,
   color: var(--muted);
   font-size: 12px;
 }
-.schedule-table {
+.horaires-table {
   border-top: 1px solid var(--line);
 }
-.schedule-line {
+.horaires-line {
   min-height: 58px;
   display: grid;
   grid-template-columns: 0.7fr 0.9fr 2fr;
@@ -749,14 +750,14 @@ h2,
   color: var(--muted);
   font-size: 13px;
 }
-.schedule-line > * {
+.horaires-line > * {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.schedule-line strong {
+.horaires-line strong {
   color: var(--text);
 }
-.schedule-heading {
+.horaires-heading {
   min-height: 43px;
   color: var(--muted);
   font-size: 9px;
@@ -764,7 +765,7 @@ h2,
   letter-spacing: 1.4px;
   text-transform: uppercase;
 }
-.schedule-footnote {
+.horaires-footnote {
   margin: 13px 0 0;
   color: var(--muted);
   font-size: 12px;
@@ -1327,6 +1328,22 @@ h2,
 .webmaster-panel {
   min-width: 0;
 }
+.site-content-image-preview {
+  display: block;
+  width: 180px;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  margin-top: 10px;
+  object-fit: cover;
+}
+.site-content-warning {
+  padding: 10px 14px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  background: var(--paper);
+  font-size: 12px;
+  text-align: center;
+}
 .admin-login,
 .admin-message {
   max-width: 480px;
@@ -1485,12 +1502,12 @@ h2,
   font-size: 12px;
   line-height: 1.6;
 }
-.schedule-editor-group {
+.horaires-editor-group {
   padding: 18px;
   margin: 22px 0;
   border: 1px solid var(--line);
 }
-.schedule-editor-group legend {
+.horaires-editor-group legend {
   float: none;
   width: auto;
   padding: 0 8px;
@@ -1499,7 +1516,7 @@ h2,
   font-family: "Oswald", sans-serif;
   font-size: 20px;
 }
-.schedule-editor-row {
+.horaires-editor-row {
   display: grid;
   grid-template-columns: 0.8fr 1fr 1.4fr auto;
   align-items: end;
@@ -1507,11 +1524,11 @@ h2,
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
 }
-.schedule-editor-row label {
+.horaires-editor-row label {
   min-width: 0;
   margin-bottom: 0;
 }
-.schedule-editor-row .delete-action {
+.horaires-editor-row .delete-action {
   min-height: 46px;
   padding: 8px 4px;
   border: 0;
@@ -1522,7 +1539,7 @@ h2,
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.schedule-add-slot {
+.horaires-add-slot {
   margin-top: 14px;
 }
 .photo-remove-button {
@@ -1900,9 +1917,9 @@ h2,
   .story-copy h2 em {
     color: #f1b782;
   }
-  .schedule-heading,
-  .schedule-line,
-  .schedule-line strong {
+  .horaires-heading,
+  .horaires-line,
+  .horaires-line strong {
     color: #e0e4e6;
   }
   .events-section {
@@ -1958,17 +1975,17 @@ h2,
 }
 
 @media (max-width: 767px) {
-  .schedule-editor-row {
+  .horaires-editor-row {
     grid-template-columns: 1fr 1fr;
     align-items: start;
   }
-  .schedule-editor-row label:nth-child(3) {
+  .horaires-editor-row label:nth-child(3) {
     grid-column: 1 / -1;
   }
-  .schedule-editor-row .delete-action {
+  .horaires-editor-row .delete-action {
     justify-self: start;
   }
-  .schedule-editor-group {
+  .horaires-editor-group {
     padding: 12px;
   }
   .webmaster-tabs {
@@ -2167,12 +2184,12 @@ h2,
   .value-item h3 {
     margin: 12px 0 5px;
   }
-  .schedule-line {
+  .horaires-line {
     grid-template-columns: 0.75fr 1fr 1.5fr;
     gap: 8px;
     font-size: 10px;
   }
-  .schedule-heading {
+  .horaires-heading {
     font-size: 8px;
   }
   .events-item {
@@ -2256,7 +2273,7 @@ h2,
   .join-actions p {
     grid-column: auto;
   }
-  .schedule-line {
+  .horaires-line {
     grid-template-columns: 0.75fr 1fr 1.4fr;
   }
   .admin-item {
