@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.tsupgrader/
+.git/
+.wrangler/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

@@ -107,13 +107,7 @@ type HorairesHebdomadaires = {
   youthSlots: HorairesSlot[];
 };
 type WebmasterTab =
-  | "articles"
-  | "board"
-  | "events"
-  | "horaires"
-  | "club"
-  | "homepage"
-  | "teams";
+  "articles" | "board" | "events" | "horaires" | "club" | "homepage" | "teams";
 
 const defaultHorairesHebdomadaires: HorairesHebdomadaires = {
   adultVenue: "Adultes · Gymnase Beaulieu",
@@ -285,9 +279,12 @@ function mergeStringFields<T extends object>(
 }
 
 function SiteContentProvider({ children }: { children: ReactNode }) {
-  const [clubInformation, setClubInformation] =
-    useState(defaultClubInformation);
-  const [homePageContent, setHomePageContent] = useState(defaultHomePageContent);
+  const [clubInformation, setClubInformation] = useState(
+    defaultClubInformation,
+  );
+  const [homePageContent, setHomePageContent] = useState(
+    defaultHomePageContent,
+  );
   const [clubError, setClubError] = useState("");
   const [homePageError, setHomePageError] = useState("");
   const [clubLoaded, setClubLoaded] = useState(!db);
@@ -612,8 +609,7 @@ function PageFrame({ children }: { children: ReactNode }) {
           ""
         )
           .replace(/\s+/g, " ")
-          .trim() ||
-        getFallbackPageHeading(pathname);
+          .trim() || getFallbackPageHeading(pathname);
 
       const title =
         pathname === "/"
@@ -942,9 +938,7 @@ function Home() {
       <section id="club-intro" className="intro-band">
         <div className="container intro-grid">
           <span className="eyebrow">{homePageContent.introEyebrow}</span>
-          <p>
-            {homePageContent.introText}
-          </p>
+          <p>{homePageContent.introText}</p>
           <Link className="text-link" to="/bureau">
             Rencontrer le club <ArrowRight size={15} />
           </Link>
@@ -957,7 +951,9 @@ function Home() {
               src={homePageContent.storyImage}
               alt={homePageContent.storyImageAlt}
             />
-            <span className="photo-caption">{homePageContent.storyCaption}</span>
+            <span className="photo-caption">
+              {homePageContent.storyCaption}
+            </span>
           </div>
           <div className="story-copy">
             <span className="eyebrow">{homePageContent.storyEyebrow}</span>
@@ -3642,8 +3638,7 @@ function PrivacyPolicy() {
               <a href={`mailto:${clubInformation.email}`}>
                 {clubInformation.email}
               </a>{" "}
-              ou
-              par courrier au siège social indiqué dans les{" "}
+              ou par courrier au siège social indiqué dans les{" "}
               <Link to="/mentions-legales">mentions légales</Link>. Vous pouvez
               également adresser une réclamation à la{" "}
               <a
@@ -3991,8 +3986,8 @@ function ClubInformationManager() {
   return (
     <section className="site-settings-admin">
       <p className="board-order-help">
-        Ces coordonnées sont partagées entre le pied de page, la page Contact
-        et les pages légales. Les gymnases et leurs adresses se modifient dans
+        Ces coordonnées sont partagées entre le pied de page, la page Contact et
+        les pages légales. Les gymnases et leurs adresses se modifient dans
         l’onglet « Horaires ».
       </p>
       {clubError && (
@@ -4085,7 +4080,11 @@ function ClubInformationManager() {
               placeholder="https://…"
             />
           </label>
-          <button className="button button-copper" type="submit" disabled={saving}>
+          <button
+            className="button button-copper"
+            type="submit"
+            disabled={saving}
+          >
             {saving ? "Enregistrement…" : "Enregistrer les informations"}{" "}
             <ArrowRight size={16} />
           </button>
@@ -4240,7 +4239,9 @@ function HomePageManager() {
               Suite du titre
               <input
                 value={draft.heroTitle}
-                onChange={(event) => updateField("heroTitle", event.target.value)}
+                onChange={(event) =>
+                  updateField("heroTitle", event.target.value)
+                }
                 maxLength={100}
                 required
               />
@@ -4270,7 +4271,9 @@ function HomePageManager() {
             Phrase finale mise en évidence
             <input
               value={draft.heroSlogan}
-              onChange={(event) => updateField("heroSlogan", event.target.value)}
+              onChange={(event) =>
+                updateField("heroSlogan", event.target.value)
+              }
               maxLength={200}
               required
             />
@@ -4460,7 +4463,11 @@ function HomePageManager() {
               </label>
             </fieldset>
           ))}
-          <button className="button button-copper" type="submit" disabled={saving}>
+          <button
+            className="button button-copper"
+            type="submit"
+            disabled={saving}
+          >
             {saving ? "Enregistrement…" : "Enregistrer la page d’accueil"}{" "}
             <ArrowRight size={16} />
           </button>
@@ -4614,7 +4621,7 @@ function TeamManager() {
 
 function Webmaster() {
   const { user, authReady, role } = useSiteSession();
-  const [activeTab, setActiveTab] = useState<WebmasterTab>("articles");
+  const [activeTab, setActiveTab] = useState<WebmasterTab>("homepage");
   const [items, setItems] = useState<Article[]>([]);
   const [editing, setEditing] = useState<Article | null>(null);
   const [articlePhotoFile, setArticlePhotoFile] = useState<File | null>(null);
@@ -4815,7 +4822,15 @@ function Webmaster() {
   function handleTabKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     const tabs: WebmasterTab[] =
       role === "admin"
-        ? ["homepage", "articles", "events", "horaires", "teams", "board", "club"]
+        ? [
+            "homepage",
+            "articles",
+            "events",
+            "horaires",
+            "teams",
+            "board",
+            "club",
+          ]
         : ["articles", "events", "horaires", "board"];
     const currentIndex = tabs.indexOf(activeTab);
     const nextIndex =
@@ -4835,11 +4850,13 @@ function Webmaster() {
   }
   useEffect(() => {
     if (
+      authReady &&
+      user &&
       role !== "admin" &&
       ["teams", "club", "homepage"].includes(activeTab)
     )
       setActiveTab("articles");
-  }, [activeTab, role]);
+  }, [activeTab, authReady, role, user]);
   return (
     <>
       <PageIntro

@@ -54,7 +54,11 @@ export function parseTeamRoster(html) {
     const genderIcon = row[1].match(
       /<i\b[^>]*class=["'][^"']*\bfa-(female|male)\b[^"']*["']/i,
     );
-    const role = [...row[1].matchAll(/class=["'][^"']*ic-match-clsmt[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)]
+    const role = [
+      ...row[1].matchAll(
+        /class=["'][^"']*ic-match-clsmt[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi,
+      ),
+    ]
       .map((match) => textContent(match[1]))
       .filter(Boolean)
       .join(" · ");
@@ -85,9 +89,7 @@ export function findDivisionLinks(instanceHtml) {
     const clubTeamRows = [
       ...standingsTable.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi),
     ].filter((row) =>
-      new RegExp(`\\b${CLUB_TEAM_CODE}-\\d+\\b`, "i").test(
-        textContent(row[1]),
-      ),
+      new RegExp(`\\b${CLUB_TEAM_CODE}-\\d+\\b`, "i").test(textContent(row[1])),
     );
     if (clubTeamRows.length === 0) continue;
 
@@ -102,7 +104,9 @@ export function findDivisionLinks(instanceHtml) {
         /<a\b[^>]*href=["'](https:\/\/icbad\.ffbad\.org\/equipe\/(\d+))["'][^>]*>([\s\S]*?)<\/a>/i,
       );
       if (!teamLink)
-        throw new Error(`La fiche d’équipe est introuvable dans « ${sectionTitle} ».`);
+        throw new Error(
+          `La fiche d’équipe est introuvable dans « ${sectionTitle} ».`,
+        );
       const code = textContent(teamLink[3]).match(
         new RegExp(`\\b${CLUB_TEAM_CODE}-(\\d+)\\b`, "i"),
       )?.[0];
@@ -113,7 +117,9 @@ export function findDivisionLinks(instanceHtml) {
       const divisionType = divisionMatch?.[1][0].toUpperCase() ?? null;
       const divisionCode = divisionMatch?.[2];
       if (!code || !teamNumber)
-        throw new Error(`Le code FFBaD de l’équipe dans « ${sectionTitle} » est illisible.`);
+        throw new Error(
+          `Le code FFBaD de l’équipe dans « ${sectionTitle} » est illisible.`,
+        );
       if (!divisionType || !divisionCode)
         throw new Error(`La division FFBaD de l’équipe ${code} est illisible.`);
       const shortName = `${divisionType}${divisionCode}`;
@@ -136,7 +142,9 @@ export function findDivisionLinks(instanceHtml) {
     }
   }
   if (found.length === 0)
-    throw new Error("Aucune équipe Cognac Badminton n’a été trouvée sur ICBaD.");
+    throw new Error(
+      "Aucune équipe Cognac Badminton n’a été trouvée sur ICBaD.",
+    );
   const shortNameCounts = new Map();
   for (const team of found)
     shortNameCounts.set(
@@ -146,7 +154,9 @@ export function findDivisionLinks(instanceHtml) {
   const uniqueTeamIds = new Set();
   return found.map((team) => {
     if (uniqueTeamIds.has(team.id))
-      throw new Error(`La fiche FFBaD ${team.teamUrl} est listée plusieurs fois.`);
+      throw new Error(
+        `La fiche FFBaD ${team.teamUrl} est listée plusieurs fois.`,
+      );
     uniqueTeamIds.add(team.id);
     const multipleInDivision = shortNameCounts.get(team.baseShortName) > 1;
     const suffix = multipleInDivision ? ` · Équipe ${team.teamNumber}` : "";
@@ -167,7 +177,9 @@ function parseStandings(table) {
     if (!teamMatch) continue;
     const cells = extractCells(row[1]).map(textContent);
     if (cells.length < 11)
-      throw new Error("Le classement ICBaD ne présente pas les colonnes attendues.");
+      throw new Error(
+        "Le classement ICBaD ne présente pas les colonnes attendues.",
+      );
     rows.push({
       position: cells[0],
       team: textContent(teamMatch[1]),
@@ -179,7 +191,9 @@ function parseStandings(table) {
     });
   }
   if (rows.length === 0)
-    throw new Error("Le classement ICBaD ne contient aucune équipe exploitable.");
+    throw new Error(
+      "Le classement ICBaD ne contient aucune équipe exploitable.",
+    );
   return rows;
 }
 
@@ -198,11 +212,13 @@ function parseMatchDate(value, startYear) {
 }
 
 export function parseCompetition(html, clubCode, standings, now = new Date()) {
-  const matchesHeading = html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)?.find((heading) =>
-    /Toutes les rencontres/i.test(textContent(heading)),
-  );
+  const matchesHeading = html
+    .match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)
+    ?.find((heading) => /Toutes les rencontres/i.test(textContent(heading)));
   if (!matchesHeading)
-    throw new Error("Le calendrier des rencontres est absent de la page ICBaD.");
+    throw new Error(
+      "Le calendrier des rencontres est absent de la page ICBaD.",
+    );
   const headingIndex = html.indexOf(matchesHeading);
   const scheduleHtml = html.slice(headingIndex);
   const matches = [];
@@ -255,13 +271,17 @@ async function fetchHtml(url) {
 }
 
 async function requireAdmin(request, env) {
-  const token = request.headers.get("Authorization")?.match(/^Bearer (.+)$/i)?.[1];
+  const token = request.headers
+    .get("Authorization")
+    ?.match(/^Bearer (.+)$/i)?.[1];
   if (!token) throw new Error("Connectez-vous avec un compte administrateur.");
   const payloadPart = token.split(".")[1];
   if (!payloadPart) throw new Error("Le jeton Firebase est invalide.");
   let claims;
   try {
-    claims = JSON.parse(atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")));
+    claims = JSON.parse(
+      atob(payloadPart.replace(/-/g, "+").replace(/_/g, "/")),
+    );
   } catch {
     throw new Error("Le jeton Firebase est invalide.");
   }
@@ -269,7 +289,8 @@ async function requireAdmin(request, env) {
   if (
     !uid ||
     claims.aud !== env.FIREBASE_PROJECT_ID ||
-    claims.iss !== `https://securetoken.google.com/${env.FIREBASE_PROJECT_ID}` ||
+    claims.iss !==
+      `https://securetoken.google.com/${env.FIREBASE_PROJECT_ID}` ||
     typeof claims.exp !== "number" ||
     claims.exp * 1000 <= Date.now()
   )
@@ -281,7 +302,9 @@ async function requireAdmin(request, env) {
   );
   if (roleResponse.status === 404 && claims.admin === true) return;
   if (!roleResponse.ok)
-    throw new Error("Impossible de vérifier le rôle administrateur dans Firebase.");
+    throw new Error(
+      "Impossible de vérifier le rôle administrateur dans Firebase.",
+    );
   const roleDocument = await roleResponse.json();
   if (roleDocument.fields?.role?.stringValue !== "admin")
     throw new Error("L’actualisation est réservée aux administrateurs.");
@@ -296,7 +319,10 @@ function base64UrlEncode(value) {
         : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
 }
 
 async function createServiceAccountToken(env) {
@@ -313,7 +339,9 @@ async function createServiceAccountToken(env) {
     !serviceAccount.client_email ||
     !serviceAccount.private_key
   )
-    throw new Error("Le compte de service ne correspond pas au projet Firebase.");
+    throw new Error(
+      "Le compte de service ne correspond pas au projet Firebase.",
+    );
 
   const now = Math.floor(Date.now() / 1000);
   const unsignedToken = [
@@ -328,8 +356,10 @@ async function createServiceAccountToken(env) {
       }),
     ),
   ].join(".");
-  const privateKey = serviceAccount.private_key
-    .replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, "");
+  const privateKey = serviceAccount.private_key.replace(
+    /-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g,
+    "",
+  );
   const key = await crypto.subtle.importKey(
     "pkcs8",
     Uint8Array.from(atob(privateKey), (character) => character.charCodeAt(0)),
@@ -352,7 +382,9 @@ async function createServiceAccountToken(env) {
     }),
   });
   if (!response.ok)
-    throw new Error(`Google OAuth a refusé le compte de service (${response.status}).`);
+    throw new Error(
+      `Google OAuth a refusé le compte de service (${response.status}).`,
+    );
   const tokenResponse = await response.json();
   if (typeof tokenResponse.access_token !== "string")
     throw new Error("Google OAuth n’a pas fourni de jeton d’accès.");
@@ -388,7 +420,9 @@ async function writeTeamsToFirestore(env, teams) {
   const token = await createServiceAccountToken(env);
   const teamIds = Object.keys(teams);
   if (teamIds.length === 0 || teamIds.length > 100)
-    throw new Error("La liste récupérée ne contient pas un nombre d’équipes valide.");
+    throw new Error(
+      "La liste récupérée ne contient pas un nombre d’équipes valide.",
+    );
   for (const [id, team] of Object.entries(teams)) {
     if (
       !/^\d+$/.test(id) ||
@@ -402,12 +436,11 @@ async function writeTeamsToFirestore(env, teams) {
       !/^https:\/\/icbad\.ffbad\.org\/equipe\/\d+$/.test(team.sourceUrl) ||
       team.sourceUrl.split("/").pop() !== id
     )
-      throw new Error(`Les données FFBaD de l’équipe ${id} ne sont pas valides.`);
+      throw new Error(
+        `Les données FFBaD de l’équipe ${id} ne sont pas valides.`,
+      );
   }
-  const existingIds = await listTeamDocumentIds(
-    env.FIREBASE_PROJECT_ID,
-    token,
-  );
+  const existingIds = await listTeamDocumentIds(env.FIREBASE_PROJECT_ID, token);
   const writes = Object.entries(teams).map(([id, team]) => ({
     update: {
       name: `projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/teams/${id}`,
@@ -426,7 +459,9 @@ async function writeTeamsToFirestore(env, teams) {
       });
   }
   if (writes.length > 500)
-    throw new Error("La synchronisation dépasse la limite atomique de Firestore.");
+    throw new Error(
+      "La synchronisation dépasse la limite atomique de Firestore.",
+    );
   const response = await fetch(
     `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(env.FIREBASE_PROJECT_ID)}/databases/(default)/documents:commit`,
     {
@@ -439,7 +474,9 @@ async function writeTeamsToFirestore(env, teams) {
     },
   );
   if (!response.ok)
-    throw new Error(`Firestore a refusé la synchronisation (${response.status}).`);
+    throw new Error(
+      `Firestore a refusé la synchronisation (${response.status}).`,
+    );
 }
 
 async function listTeamDocumentIds(projectId, token) {
@@ -455,7 +492,9 @@ async function listTeamDocumentIds(projectId, token) {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok)
-      throw new Error(`Firestore n’a pas pu lire la liste des équipes (${response.status}).`);
+      throw new Error(
+        `Firestore n’a pas pu lire la liste des équipes (${response.status}).`,
+      );
     const result = await response.json();
     for (const document of result.documents ?? [])
       ids.push(document.name.split("/").pop());
@@ -479,11 +518,7 @@ async function collectTeamData() {
           name: team.name,
           shortName: team.shortName,
           players: parseTeamRoster(teamHtml),
-          ...parseCompetition(
-            competitionHtml,
-            team.teamCode,
-            team.standings,
-          ),
+          ...parseCompetition(competitionHtml, team.teamCode, team.standings),
           sourceUrl: team.teamUrl,
           season: textContent(
             instanceHtml.match(/<a[^>]*>\s*\d{4}\/\d{4}\s*<\/a>/i)?.[0] ?? "",
@@ -553,7 +588,11 @@ export default {
     if (!Object.keys(cors).length)
       return jsonResponse({ error: "Origine non autorisée." }, 403, {});
     if (!env.FIREBASE_PROJECT_ID)
-      return jsonResponse({ error: "Configuration Firebase manquante." }, 500, cors);
+      return jsonResponse(
+        { error: "Configuration Firebase manquante." },
+        500,
+        cors,
+      );
 
     try {
       await requireAdmin(request, env);

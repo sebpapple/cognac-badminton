@@ -15,6 +15,8 @@ Vérification de production : `npm run build`.
 
 `npm test` exécute les tests automatisés des parcours publics et interactions principales. Chaque build lance d’abord cette suite, puis vérifie TypeScript et génère le site. Les tests simulent Firebase et l’envoi du formulaire : ils ne nécessitent ni identifiants, ni accès réseau à ces services.
 
+Le formatage du dépôt suit Prettier : `npm run format` applique les règles et `npm run format:check` vérifie le résultat. Les fichiers générés et caches de compilation sont exclus.
+
 ## Installer le site comme application
 
 Le site est une PWA installable sur Android et iPhone, sans publication dans une boutique :
@@ -48,22 +50,22 @@ Pour activer la synchronisation :
 2. Dans Google Cloud Console, créer un compte de service dédié au Worker et lui accorder le rôle IAM **Cloud Datastore User** sur le projet Firebase. Générer une clé JSON pour ce compte. Ce compte sert uniquement à l’écriture planifiée ; les règles Firestore ne s’appliquent pas aux comptes de service, c’est pourquoi cette clé ne doit jamais être publiée ni ajoutée au dépôt.
 3. Depuis un terminal avec Node.js, se connecter à Cloudflare puis créer le Worker :
 
-	```sh
-	npx wrangler login
-	npx wrangler deploy --config workers/team-sync/wrangler.toml
-	```
+   ```sh
+   npx wrangler login
+   npx wrangler deploy --config workers/team-sync/wrangler.toml
+   ```
 
 4. Enregistrer le JSON comme secret Worker. À l’invite, coller le contenu complet du fichier de clé JSON :
 
-	```sh
-	npx wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --config workers/team-sync/wrangler.toml
-	```
+   ```sh
+   npx wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --config workers/team-sync/wrangler.toml
+   ```
 
 5. Redéployer pour publier le déclencheur Cron avec le secret configuré :
 
-	```sh
-	npx wrangler deploy --config workers/team-sync/wrangler.toml
-	```
+   ```sh
+   npx wrangler deploy --config workers/team-sync/wrangler.toml
+   ```
 
 6. Copier l’URL `workers.dev` affichée par Wrangler et l’enregistrer comme variable GitHub Actions `VITE_TEAM_SYNC_URL`. Pour le développement local, ajouter `VITE_TEAM_SYNC_URL` à `.env.local`.
 7. Publier les règles de `firestore.rules`, puis reconstruire/redéployer le site afin que cette variable soit intégrée.
@@ -82,11 +84,11 @@ Le Worker n’accepte que les URL ICBaD construites à partir des liens de la pa
 4. Dans Firebase Console > Authentication > Users, créer les comptes du bureau (un compte par personne).
 5. Depuis un terminal de confiance connecté au projet (Application Default Credentials, par exemple via `gcloud auth application-default login`), attribuer le rôle :
 
-	```sh
-	npm run webmaster:claim -- grant badcognac@gmail.com
-	```
+   ```sh
+   npm run webmaster:claim -- grant badcognac@gmail.com
+   ```
 
-	Pour retirer le rôle : `npm run webmaster:claim -- revoke badcognac@gmail.com`. Fermer puis rouvrir la session sur `/webmaster` afin de renouveler le jeton.
+   Pour retirer le rôle : `npm run webmaster:claim -- revoke badcognac@gmail.com`. Fermer puis rouvrir la session sur `/webmaster` afin de renouveler le jeton.
 
 Le script utilise Firebase Admin côté serveur local uniquement. Ne jamais ajouter de clé de compte de service au dépôt ni au bundle navigateur.
 

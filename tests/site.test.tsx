@@ -10,7 +10,10 @@ import App from "../src/App";
 describe("configuration PWA", () => {
   it("déclare une application installable et des icônes de taille requise", () => {
     const manifest = JSON.parse(
-      readFileSync(resolve(process.cwd(), "public/manifest.webmanifest"), "utf8"),
+      readFileSync(
+        resolve(process.cwd(), "public/manifest.webmanifest"),
+        "utf8",
+      ),
     ) as {
       name: string;
       start_url: string;
@@ -38,15 +41,10 @@ describe("configuration PWA", () => {
   });
 
   it("relie le manifeste, les icônes iOS et le service worker au bon chemin", () => {
-    const source = readFileSync(
-      resolve(process.cwd(), "src/main.tsx"),
-      "utf8",
-    );
+    const source = readFileSync(resolve(process.cwd(), "src/main.tsx"), "utf8");
     const html = readFileSync(resolve(process.cwd(), "index.html"), "utf8");
 
-    expect(source).toContain(
-      'register(`${import.meta.env.BASE_URL}sw.js`',
-    );
+    expect(source).toContain("register(`${import.meta.env.BASE_URL}sw.js`");
     expect(html).toContain(
       'rel="manifest" href="%BASE_URL%manifest.webmanifest"',
     );
@@ -115,7 +113,9 @@ describe("navigation et accessibilité", () => {
     const navigation = screen.getByRole("navigation", {
       name: "Navigation principale",
     });
-    await user.click(within(navigation).getByRole("link", { name: "Horaires" }));
+    await user.click(
+      within(navigation).getByRole("link", { name: "Horaires" }),
+    );
 
     expect(screen.getByTestId("current-route")).toHaveTextContent("/horaires");
     expect(
@@ -134,7 +134,9 @@ describe("navigation et accessibilité", () => {
     renderAt(from);
 
     expect(screen.getByTestId("current-route")).toHaveTextContent(to);
-    expect(screen.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { level: 1, name: heading }),
+    ).toBeVisible();
   });
 
   it("donne un titre à la route équipe avant le chargement de ses données", () => {
@@ -226,7 +228,9 @@ describe("pages publiques et données de démonstration", () => {
     renderAt("/actualites");
 
     expect(
-      screen.getByRole("heading", { name: "La saison reprend sur les terrains" }),
+      screen.getByRole("heading", {
+        name: "La saison reprend sur les terrains",
+      }),
     ).toBeVisible();
     const nextPage = screen.getByRole("button", { name: "Page suivante" });
     expect(
@@ -235,12 +239,16 @@ describe("pages publiques et données de démonstration", () => {
 
     await user.click(nextPage);
     expect(
-      screen.getByRole("heading", { name: "Le badminton, aussi pour le plaisir" }),
+      screen.getByRole("heading", {
+        name: "Le badminton, aussi pour le plaisir",
+      }),
     ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Page précédente" }));
     expect(
-      screen.getByRole("heading", { name: "La saison reprend sur les terrains" }),
+      screen.getByRole("heading", {
+        name: "La saison reprend sur les terrains",
+      }),
     ).toBeVisible();
   });
 
@@ -248,9 +256,13 @@ describe("pages publiques et données de démonstration", () => {
     const { unmount } = renderAt("/actualites/rentrée");
 
     expect(
-      screen.getByRole("heading", { name: "La saison reprend sur les terrains" }),
+      screen.getByRole("heading", {
+        name: "La saison reprend sur les terrains",
+      }),
     ).toBeVisible();
-    expect(screen.getByText(/partager une saison sportive et conviviale/)).toBeVisible();
+    expect(
+      screen.getByText(/partager une saison sportive et conviviale/),
+    ).toBeVisible();
 
     unmount();
     renderAt("/actualites/inconnue");
@@ -268,7 +280,9 @@ describe("pages publiques et données de démonstration", () => {
     expect(
       screen
         .getAllByRole("link", { name: "badcognac@gmail.com" })
-        .every((link) => link.getAttribute("href") === "mailto:badcognac@gmail.com"),
+        .every(
+          (link) => link.getAttribute("href") === "mailto:badcognac@gmail.com",
+        ),
     ).toBe(true);
     expect(screen.getByText(/Cognac · Charente/)).toBeInTheDocument();
     expect(
@@ -303,7 +317,9 @@ describe("formulaire de contact", () => {
     renderAt("/contact");
 
     await completeContactForm();
-    await user.click(screen.getByRole("button", { name: "Envoyer le message" }));
+    await user.click(
+      screen.getByRole("button", { name: "Envoyer le message" }),
+    );
 
     expect(
       await screen.findByText(/Merci pour votre message\./, {
@@ -322,7 +338,9 @@ describe("formulaire de contact", () => {
     renderAt("/contact");
 
     await completeContactForm();
-    await user.click(screen.getByRole("button", { name: "Envoyer le message" }));
+    await user.click(
+      screen.getByRole("button", { name: "Envoyer le message" }),
+    );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Le message n’a pas pu être envoyé.",
@@ -350,9 +368,7 @@ describe("routes de repli et espace webmaster", () => {
       }),
     );
 
-    expect(
-      screen.getByText("Vous restez sur cette page."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Vous restez sur cette page.")).toBeInTheDocument();
     expect(screen.getByTestId("current-route")).toHaveTextContent(
       "/page-inconnue",
     );

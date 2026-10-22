@@ -6,11 +6,15 @@ self.addEventListener("install", (event) => {
     (async () => {
       const response = await fetch(new Request(APP_SHELL, { cache: "reload" }));
       if (!response.ok)
-        throw new Error(`Impossible de charger l’application : ${response.status}`);
+        throw new Error(
+          `Impossible de charger l’application : ${response.status}`,
+        );
 
       const html = await response.clone().text();
       const assets = [
-        ...html.matchAll(/(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/gi),
+        ...html.matchAll(
+          /(?:src|href)=["']([^"']+\.(?:js|css)(?:\?[^"']*)?)["']/gi,
+        ),
       ]
         .map((match) => new URL(match[1], APP_SHELL))
         .filter((asset) => asset.origin === self.location.origin);
@@ -58,9 +62,9 @@ self.addEventListener("fetch", (event) => {
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            void caches.open(CACHE_NAME).then((cache) =>
-              cache.put(request, copy),
-            );
+            void caches
+              .open(CACHE_NAME)
+              .then((cache) => cache.put(request, copy));
           }
           return response;
         })
@@ -76,7 +80,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (!["script", "style", "image", "font", "worker"].includes(request.destination))
+  if (
+    !["script", "style", "image", "font", "worker"].includes(
+      request.destination,
+    )
+  )
     return;
 
   event.respondWith(
@@ -86,9 +94,9 @@ self.addEventListener("fetch", (event) => {
         fetch(request).then((response) => {
           if (response.ok) {
             const copy = response.clone();
-            void caches.open(CACHE_NAME).then((cache) =>
-              cache.put(request, copy),
-            );
+            void caches
+              .open(CACHE_NAME)
+              .then((cache) => cache.put(request, copy));
           }
           return response;
         }),

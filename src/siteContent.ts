@@ -75,7 +75,8 @@ export const defaultHomePageContent: HomePageContent = {
   valuesTitle: "Votre jeu.",
   valuesAccent: "Votre rythme.",
   value1Title: "Loisir",
-  value1Description: "Du jeu libre et des rencontres dans une ambiance détendue.",
+  value1Description:
+    "Du jeu libre et des rencontres dans une ambiance détendue.",
   value2Title: "Progression",
   value2Description:
     "Des séances encadrées pour apprendre et évoluer à son rythme.",
