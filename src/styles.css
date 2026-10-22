@@ -29,6 +29,12 @@ body {
   color: var(--text);
   background: var(--surface);
 }
+p,
+li,
+blockquote,
+.article-content {
+  text-align: justify;
+}
 ::selection {
   color: #fff;
   background: var(--copper-dark);
@@ -406,24 +412,15 @@ h2,
   height: 100%;
   display: grid;
   place-items: center;
-  color: #fff;
-  background: var(--navy);
-  font-family: "Oswald", sans-serif;
-  font-size: 22px;
+  background: var(--paper);
+}
+.news-image-empty img {
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
 }
 .news-image:hover img {
   transform: scale(1.04);
-}
-.news-category {
-  position: absolute;
-  bottom: 14px;
-  left: 14px;
-  padding: 8px 10px;
-  color: #fff;
-  background: var(--navy);
-  font-size: 9px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
 }
 .news-card-body {
   padding: 19px 2px 0;
@@ -593,7 +590,6 @@ h2,
   gap: 20px;
 }
 .team-photo {
-  position: relative;
   min-width: 0;
   margin: 0;
   overflow: hidden;
@@ -604,35 +600,29 @@ h2,
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: cover;
-  opacity: 0.78;
 }
 .team-photo figcaption {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
   display: grid;
-  gap: 5px;
-  padding: 18px;
+  gap: 2px;
+  padding: 8px 12px;
   color: #fff;
-  background: linear-gradient(transparent, rgba(20, 32, 45, 0.9));
+  background: rgba(20, 32, 45, 0.97);
 }
-.team-photo figcaption span {
-  color: #f1b782;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
+.team-photo figcaption > span:first-child {
+  display: none;
 }
 .team-photo figcaption strong {
   font-family: "Oswald", sans-serif;
-  font-size: 21px;
+  font-size: 17px;
   font-weight: 500;
+  line-height: 1.2;
 }
 .team-photo figcaption .team-member-role {
-  color: #fff;
-  font-size: 12px;
-  font-weight: 500;
+  color: #f1b782;
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.2px;
+  line-height: 1.3;
 }
 .team-section {
   background-color: var(--paper);
@@ -767,27 +757,23 @@ h2,
   color: var(--muted);
   font-size: 12px;
 }
-.tournament-section {
+.events-section {
   background: var(--paper);
 }
-.tournament-list {
+.events-list {
   border-top: 1px solid #d8dbdc;
 }
-.tournament {
+.events-item {
   min-height: 108px;
   display: grid;
-  grid-template-columns: 55px 66px 1fr auto;
+  grid-template-columns: 55px 1fr;
   align-items: center;
   gap: 23px;
   border-bottom: 1px solid #d8dbdc;
 }
-.tournament-number {
-  color: #626b73;
-  font-size: 10px;
-}
-.tournament-date {
+.events-date {
   width: 55px;
-  height: 60px;
+  min-height: 72px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -795,30 +781,33 @@ h2,
   color: #fff;
   background: var(--navy);
 }
-.tournament-date strong {
+.events-date strong {
   font-family: "Oswald", sans-serif;
   font-size: 23px;
   line-height: 1;
 }
-.tournament-date span {
+.events-date-month {
   margin-top: 4px;
   color: #f1b782;
   font-size: 9px;
   letter-spacing: 1px;
 }
-.tournament-name h3 {
+.events-date-year {
+  margin-top: 2px;
+  color: #fff;
+  font-size: 8px;
+  line-height: 1;
+}
+.events-name h3 {
   margin: 0 0 4px;
   font-family: "Oswald", sans-serif;
   font-size: 21px;
   font-weight: 500;
 }
-.tournament-name p {
+.events-name p {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
-}
-.tournament-arrow {
-  color: var(--copper-dark);
 }
 .team-hub {
   background: var(--paper);
@@ -921,9 +910,22 @@ h2,
   border-top: 1px solid var(--line);
   text-align: left;
 }
+.team-table .team-table-center-cell {
+  text-align: center;
+}
 .team-table .team-rank-cell {
   width: 76px;
   min-width: 76px;
+  text-align: center;
+}
+.team-table .team-ranking-column {
+  width: 86px;
+  min-width: 86px;
+  padding-right: 8px;
+  padding-left: 8px;
+  text-align: right;
+}
+.team-table td.team-ranking-column {
   text-align: center;
 }
 .team-table th {
@@ -947,6 +949,11 @@ h2,
   text-transform: inherit;
   cursor: pointer;
 }
+.team-ranking-column .team-sort-button {
+  width: 100%;
+  justify-content: flex-end;
+  text-align: right;
+}
 .team-sort-button svg {
   flex: 0 0 auto;
 }
@@ -963,6 +970,60 @@ h2,
 }
 .team-player-name {
   vertical-align: middle;
+}
+.team-ranking {
+  display: inline-block;
+  min-width: 34px;
+  padding: 3px 6px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+.team-ranking-national {
+  color: #fff;
+  background: #f80220;
+}
+.team-ranking-regional {
+  color: #fff;
+  background: #4a90e2;
+}
+.team-ranking-departmental {
+  color: #000;
+  background: #7ed321;
+}
+.team-ranking-promotion {
+  color: #525353;
+  background: #f8e71c;
+}
+.team-ranking-unclassified {
+  color: #fff;
+  background: #9b9b9b;
+}
+.team-match-score {
+  font-weight: inherit;
+}
+.team-match-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.team-match-location svg {
+  flex: 0 0 auto;
+  color: var(--copper-dark);
+}
+.team-match-score-win {
+  color: #1b6b3a;
+  font-weight: 700;
+}
+.team-match-score-loss {
+  color: #a52a2a;
+  font-weight: 700;
+}
+.team-match-score-draw {
+  color: #8a5700;
+  font-weight: 700;
 }
 .team-gender-female {
   color: #a23c45;
@@ -1337,9 +1398,20 @@ h2,
   font-size: 34px;
 }
 .board-admin-item {
-  grid-template-columns: 58px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding: 8px 0;
   cursor: grab;
+}
+.board-member-identity {
+  display: flex;
+  align-items: center;
+  justify-self: start;
+  gap: 10px;
+  min-width: 0;
+  text-align: left;
+}
+.board-member-identity > div {
+  min-width: 0;
 }
 .board-admin-item:active {
   cursor: grabbing;
@@ -1362,6 +1434,13 @@ h2,
   display: flex;
   gap: 3px;
 }
+.board-member-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  white-space: nowrap;
+}
 .board-admin-item .board-order-actions button {
   min-width: 30px;
   padding: 4px;
@@ -1378,6 +1457,90 @@ h2,
   height: 120px;
   margin: -4px 0 20px;
   object-fit: cover;
+}
+.board-photo-placeholder {
+  object-fit: contain !important;
+  opacity: 1 !important;
+  background: #fff;
+  padding: 8px;
+}
+.board-upload-notice {
+  padding: 12px 14px;
+  margin: 0 0 16px;
+  color: var(--muted);
+  background: var(--paper);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.schedule-editor-group {
+  padding: 18px;
+  margin: 22px 0;
+  border: 1px solid var(--line);
+}
+.schedule-editor-group legend {
+  float: none;
+  width: auto;
+  padding: 0 8px;
+  margin: 0;
+  color: var(--navy);
+  font-family: "Oswald", sans-serif;
+  font-size: 20px;
+}
+.schedule-editor-row {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr 1.4fr auto;
+  align-items: end;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.schedule-editor-row label {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.schedule-editor-row .delete-action {
+  min-height: 46px;
+  padding: 8px 4px;
+  border: 0;
+  color: #8e322c;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.schedule-add-slot {
+  margin-top: 14px;
+}
+.photo-remove-button {
+  min-height: 42px;
+  color: #8e322c;
+  border-color: #d9b7b4;
+}
+.photo-form-actions {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+.photo-form-actions .photo-remove-button {
+  margin: 0;
+}
+.photo-form-actions .cancel-edit {
+  margin: 0;
+}
+.photo-form-actions-single {
+  margin-top: -12px;
+}
+.photo-remove-button:hover:not(:disabled) {
+  color: #fff;
+  border-color: #8e322c;
+  background: #8e322c;
+}
+.photo-remove-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .image-cropper {
   max-width: 560px;
@@ -1484,17 +1647,39 @@ h2,
 .not-found h1 {
   margin-bottom: 20px;
 }
+.not-found-redirect {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 22px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.not-found-redirect p {
+  margin: 0;
+}
+.not-found-loader {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--line);
+  border-top-color: var(--copper-dark);
+  border-radius: 50%;
+  animation: not-found-spin 0.8s linear infinite;
+}
+@keyframes not-found-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .article-detail {
   padding: 54px 0 80px;
 }
 .article-container {
   max-width: 850px;
 }
-.article-category {
-  margin-top: 35px;
-}
 .article-detail h1 {
-  margin: 12px 0 17px;
+  margin: 35px 0 17px;
   color: var(--text);
   font-size: 52px;
   line-height: 1.1;
@@ -1514,6 +1699,28 @@ h2,
   height: auto;
   object-fit: contain;
 }
+.article-cover-empty {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 480px;
+  display: grid;
+  place-items: center;
+  background: var(--paper);
+}
+.article-cover-empty img {
+  width: min(30%, 180px);
+  max-height: 70%;
+  object-fit: contain;
+}
+.article-photo-preview {
+  display: block;
+  width: 240px;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  margin: -4px 0 20px;
+  object-fit: cover;
+  background: var(--paper);
+}
 .article-excerpt {
   margin: 28px 0 16px;
   color: var(--text);
@@ -1522,7 +1729,7 @@ h2,
   line-height: 1.4;
 }
 .article-content {
-  max-width: 680px;
+  width: 100%;
   color: var(--muted);
   font-size: 15px;
   line-height: 1.9;
@@ -1677,11 +1884,11 @@ h2,
   .schedule-line strong {
     color: #e0e4e6;
   }
-  .tournament-section {
+  .events-section {
     background: #202d39;
   }
-  .tournament-list,
-  .tournament {
+  .events-list,
+  .events-item {
     border-color: #46525c;
   }
   .contact-form input,
@@ -1715,6 +1922,25 @@ h2,
 }
 
 @media (max-width: 767px) {
+  .schedule-editor-row {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+  .schedule-editor-row label:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+  .schedule-editor-row .delete-action {
+    justify-self: start;
+  }
+  .schedule-editor-group {
+    padding: 12px;
+  }
+  .webmaster-tabs {
+    overflow-x: auto;
+  }
+  .webmaster-tab {
+    flex: 0 0 auto;
+  }
   .header-inner {
     padding: 0 20px;
   }
@@ -1913,14 +2139,14 @@ h2,
   .schedule-heading {
     font-size: 8px;
   }
-  .tournament {
-    grid-template-columns: 26px 55px 1fr auto;
+  .events-item {
+    grid-template-columns: 55px 1fr;
     gap: 10px;
   }
-  .tournament-name h3 {
+  .events-name h3 {
     font-size: 17px;
   }
-  .tournament-name p {
+  .events-name p {
     font-size: 10px;
   }
   .team-hub-card {
@@ -2017,29 +2243,34 @@ h2,
     grid-row: 1;
   }
   .board-admin-item {
-    grid-template-columns: 42px minmax(0, 1fr) auto;
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px 10px;
   }
   .board-admin-item img {
     width: 36px;
     height: 36px;
   }
-  .board-admin-item > div:nth-of-type(1) {
-    grid-column: 2;
+  .board-admin-item .board-member-identity {
+    grid-column: 1;
     grid-row: 1;
+  }
+  .board-admin-item .board-member-controls {
+    grid-column: 1;
+    grid-row: 2;
+    justify-content: flex-end;
+    gap: 6px;
+    padding: 0;
   }
   .board-admin-item .board-order-actions {
-    grid-column: 3;
-    grid-row: 1;
+    gap: 0;
   }
-  .board-admin-item > button:not(.delete-action) {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: start;
+  .board-admin-item .board-order-actions button {
+    min-width: 24px;
+    padding: 4px 2px;
   }
-  .board-admin-item > .delete-action {
-    grid-column: 3;
-    grid-row: 2;
+  .board-admin-item .board-member-controls > button {
+    padding: 4px 2px;
+    font-size: 10px;
   }
   .admin-top {
     align-items: flex-start;

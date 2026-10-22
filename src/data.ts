@@ -1,7 +1,6 @@
 export type Article = {
   id: string;
   title: string;
-  category: string;
   date: string;
   author: string;
   excerpt: string;
@@ -13,7 +12,6 @@ export const demoArticles: Article[] = [
   {
     id: "rentrée",
     title: "La saison reprend sur les terrains",
-    category: "Vie du club",
     date: "2026-09-08",
     author: "Le bureau",
     excerpt:
@@ -26,7 +24,6 @@ export const demoArticles: Article[] = [
   {
     id: "jeunes",
     title: "Le plaisir de progresser ensemble",
-    category: "Formation",
     date: "2026-08-21",
     author: "Équipe encadrante",
     excerpt:
@@ -39,7 +36,6 @@ export const demoArticles: Article[] = [
   {
     id: "tournoi",
     title: "Les rendez-vous de la saison",
-    category: "Compétition",
     date: "2026-08-02",
     author: "Le bureau",
     excerpt:
@@ -52,7 +48,6 @@ export const demoArticles: Article[] = [
   {
     id: "convivialite",
     title: "Le badminton, aussi pour le plaisir",
-    category: "Club",
     date: "2026-07-14",
     author: "Le bureau",
     excerpt:

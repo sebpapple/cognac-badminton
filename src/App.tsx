@@ -12,16 +12,19 @@ import {
 } from "react";
 import {
   Link,
+  Navigate,
   NavLink,
   Route,
   Routes,
   useLocation,
+  useNavigate,
   useParams,
 } from "react-router-dom";
 import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -53,12 +56,14 @@ import {
   ChevronRight,
   Clock3,
   Facebook,
+  House,
   Instagram,
   Mail,
   MapPin,
   Menu,
+  Network,
+  Plane,
   ShieldCheck,
-  Trophy,
   X,
 } from "lucide-react";
 import { Article, ClubEvent, demoArticles, demoEvents } from "./data";
@@ -82,7 +87,62 @@ type BoardMember = {
   photoUrl: string;
   order?: number;
 };
-type WebmasterTab = "articles" | "board" | "events" | "teams";
+type ScheduleSlot = {
+  day: string;
+  time: string;
+  activity: string;
+};
+type WeeklySchedule = {
+  adultVenue: string;
+  adultAddress: string;
+  adultSlots: ScheduleSlot[];
+  youthVenue: string;
+  youthAddress: string;
+  youthNote: string;
+  youthSlots: ScheduleSlot[];
+};
+type WebmasterTab = "articles" | "board" | "events" | "schedule" | "teams";
+
+const defaultWeeklySchedule: WeeklySchedule = {
+  adultVenue: "Adultes · Gymnase Beaulieu",
+  adultAddress: "Rue du Port, Cognac",
+  adultSlots: [
+    { day: "Lundi", time: "18h30–20h", activity: "Initiation débutant" },
+    {
+      day: "Lundi",
+      time: "20h–22h",
+      activity: "Jeu libre · priorité débutants",
+    },
+    {
+      day: "Mardi",
+      time: "18h30–22h",
+      activity: "Jeu libre jeunes et adultes",
+    },
+    {
+      day: "Mercredi",
+      time: "18h30–22h",
+      activity: "Jeu libre jeunes et adultes",
+    },
+    {
+      day: "Jeudi",
+      time: "18h30–22h",
+      activity: "Jeu libre jeunes et adultes",
+    },
+    {
+      day: "Vendredi",
+      time: "18h–20h",
+      activity: "Jeu libre jeunes et adultes",
+    },
+  ],
+  youthVenue: "Jeunes · Gymnase Jean Monnet",
+  youthAddress: "Collège Jean Monnet · Cognac · École Française de Badminton",
+  youthNote:
+    "Au-delà de 17 ans, les joueurs sont accueillis sur les créneaux adultes.",
+  youthSlots: [
+    { day: "Mardi", time: "18h15–19h45", activity: "5–10 ans" },
+    { day: "Jeudi", time: "18h15–19h45", activity: "11–17 ans" },
+  ],
+};
 
 function sortBoardMembers(members: BoardMember[]) {
   return [...members].sort((first, second) => {
@@ -92,6 +152,31 @@ function sortBoardMembers(members: BoardMember[]) {
     if (typeof second.order === "number") return 1;
     return first.name.localeCompare(second.name, "fr");
   });
+}
+
+function BoardMemberPhoto({
+  member,
+  className,
+}: {
+  member: BoardMember;
+  className?: string;
+}) {
+  const hasPhoto = Boolean(member.photoUrl);
+  return (
+    <img
+      className={`${className ?? ""}${hasPhoto ? "" : " board-photo-placeholder"}`}
+      src={
+        member.photoUrl ||
+        `${import.meta.env.BASE_URL}logo.png`
+      }
+      alt={
+        hasPhoto
+          ? `Portrait de ${member.name}`
+          : `Logo Cognac Badminton pour ${member.name}`
+      }
+      loading="lazy"
+    />
+  );
 }
 
 function isFirestorePermissionDenied(error: unknown): boolean {
@@ -234,7 +319,8 @@ function Header() {
           aria-label="Navigation principale"
         >
           {[
-            ["Le club", "/club"],
+            ["Accueil", "/"],
+            ["Le bureau", "/bureau"],
             ["Créneaux", "/creneaux"],
             ["Évènements", "/evenements"],
             ["Les équipes", "/equipes"],
@@ -270,7 +356,7 @@ function Footer() {
         </div>
         <div>
           <span className="footer-label">Explorer</span>
-          <Link to="/club">Le club</Link>
+          <Link to="/bureau">Le bureau</Link>
           <Link to="/creneaux">Créneaux</Link>
           <Link to="/evenements">Évènements</Link>
           <Link to="/actualites">Actualités</Link>
@@ -427,7 +513,7 @@ function useBoardMembers() {
   return { members, error, loading };
 }
 
-async function uploadBoardMemberPhoto(file: File): Promise<string> {
+async function uploadClubImage(file: File): Promise<string> {
   if (!cloudinaryCloudName || !cloudinaryUploadPreset) {
     throw new Error(
       "Configurez VITE_CLOUDINARY_CLOUD_NAME et VITE_CLOUDINARY_UPLOAD_PRESET pour téléverser des photos.",
@@ -463,11 +549,7 @@ function BoardMembersGallery() {
     <div className="team-gallery">
       {members.map((member) => (
         <figure className="team-photo" key={member.id}>
-          <img
-            src={member.photoUrl}
-            alt={`Portrait de ${member.name}`}
-            loading="lazy"
-          />
+          <BoardMemberPhoto member={member} />
           <figcaption>
             <span>BUREAU DU CLUB</span>
             <strong>{member.name}</strong>
@@ -508,12 +590,11 @@ function NewsCard({ article }: { article: Article }) {
           <span
             className="news-image-empty"
             role="img"
-            aria-label="Article sans photo"
+            aria-label="Logo Cognac Badminton utilisé comme illustration"
           >
-            Cognac Badminton
+            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="" />
           </span>
         )}
-        <span className="news-category">{article.category}</span>
       </Link>
       <div className="news-card-body">
         <time dateTime={article.date}>
@@ -608,7 +689,7 @@ function Home() {
             tous âges et de tous niveaux autour d’un sport aussi vif que
             convivial.
           </p>
-          <Link className="text-link" to="/club">
+          <Link className="text-link" to="/bureau">
             Rencontrer le club <ArrowRight size={15} />
           </Link>
         </div>
@@ -742,6 +823,7 @@ function Club() {
               title="Une équipe, des rencontres"
               copy="Découvrez les membres du bureau de Cognac Badminton."
             />
+            <Network className="section-icon" aria-hidden="true" />
           </div>
           <BoardMembersGallery />
         </div>
@@ -753,25 +835,24 @@ function Club() {
 function EventList() {
   const { events, error, loading } = useEvents();
   return (
-    <div className="tournament-list" aria-live="polite">
-      {events.map((event, index) => (
-        <article className="tournament" key={event.id}>
-          <span className="tournament-number">
-            {String(index + 1).padStart(2, "0")}
-          </span>
-          <time className="tournament-date" dateTime={event.date}>
+    <div className="events-list" aria-live="polite">
+      {events.map((event) => (
+        <article className="events-item" key={event.id}>
+          <time className="events-date" dateTime={event.date}>
             <strong>{formatEventDate(event.date, { day: "2-digit" })}</strong>
-            <span>
+            <span className="events-date-month">
               {formatEventDate(event.date, { month: "short" })
                 .replace(".", "")
                 .toLocaleUpperCase("fr-FR")}
             </span>
+            <span className="events-date-year">
+              {formatEventDate(event.date, { year: "numeric" })}
+            </span>
           </time>
-          <div className="tournament-name">
+          <div className="events-name">
             <h3>{event.title}</h3>
             <p>{event.detail}</p>
           </div>
-          <ArrowUpRight className="tournament-arrow" />
         </article>
       ))}
       {loading && (
@@ -807,7 +888,7 @@ function EventsPage() {
         }
         description="Retrouvez les rendez-vous sportifs et les temps forts du Cognac Badminton."
       />
-      <section className="section tournament-section">
+      <section className="section events-section">
         <div className="container">
           <div className="section-row">
             <SectionHead
@@ -815,7 +896,7 @@ function EventsPage() {
               title="À noter dans vos agendas"
               copy="Les dates et informations sont communiquées par le club et peuvent évoluer."
             />
-            <Trophy className="section-icon" />
+            <CalendarDays className="section-icon" />
           </div>
           <EventList />
         </div>
@@ -1053,7 +1134,89 @@ function EventsManager({ role }: { role: SiteRole }) {
   );
 }
 
+function useWeeklySchedule() {
+  const [schedule, setSchedule] = useState<WeeklySchedule | null>(
+    db ? null : defaultWeeklySchedule,
+  );
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(Boolean(db));
+
+  useEffect(() => {
+    if (!db) return;
+    let active = true;
+    getDoc(doc(db, "siteContent", "schedule"))
+      .then((snapshot) => {
+        if (!active) return;
+        if (!snapshot.exists()) {
+          setSchedule(defaultWeeklySchedule);
+          return;
+        }
+        const data = snapshot.data();
+        setSchedule({
+          ...defaultWeeklySchedule,
+          ...data,
+          adultSlots: Array.isArray(data.adultSlots)
+            ? data.adultSlots
+            : defaultWeeklySchedule.adultSlots,
+          youthSlots: Array.isArray(data.youthSlots)
+            ? data.youthSlots
+            : defaultWeeklySchedule.youthSlots,
+        } as WeeklySchedule);
+      })
+      .catch(() => {
+        if (active)
+          setError(
+            "Les horaires ne peuvent pas être chargés pour le moment.",
+          );
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return { schedule, error, loading };
+}
+
+function ScheduleTable({
+  title,
+  thirdColumnLabel,
+  slots,
+}: {
+  title: string;
+  thirdColumnLabel: string;
+  slots: ScheduleSlot[];
+}) {
+  const seenDays = new Set<string>();
+  return (
+    <div className="schedule-table" role="table" aria-label={title}>
+      <div className="schedule-line schedule-heading" role="row">
+        <span role="columnheader">Jour</span>
+        <span role="columnheader">Horaires</span>
+        <span role="columnheader">{thirdColumnLabel}</span>
+      </div>
+      {slots.map((slot, index) => {
+        const normalizedDay = slot.day.trim().toLocaleLowerCase("fr");
+        const showDay = !normalizedDay || !seenDays.has(normalizedDay);
+        if (normalizedDay) seenDays.add(normalizedDay);
+        return (
+          <div className="schedule-line" role="row" key={`${slot.day}-${index}`}>
+            <strong role="rowheader" aria-label={slot.day || undefined}>
+              {showDay ? slot.day : ""}
+            </strong>
+            <span role="cell">{slot.time}</span>
+            <span role="cell">{slot.activity}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SchedulePage() {
+  const { schedule, error, loading } = useWeeklySchedule();
   return (
     <>
       <PageIntro
@@ -1075,91 +1238,45 @@ function SchedulePage() {
               title="On se retrouve au gymnase"
               copy="Le club est labellisé École Française de Badminton. Deux entraînements jeunes sont proposés chaque semaine aux 5–17 ans ; au-delà de 17 ans, les joueurs rejoignent les créneaux adultes."
             />
+            <Clock3 className="section-icon" aria-hidden="true" />
           </div>
-          <div className="schedule-groups">
-            <section
-              className="schedule-venue"
-              aria-labelledby="adultes-heading"
-            >
-              <h3 id="adultes-heading">Adultes · Gymnase Beaulieu</h3>
-              <p className="venue-address">Rue du Port, Cognac</p>
-              <div
-                className="schedule-table"
-                role="table"
-                aria-label="Horaires adultes à Beaulieu"
+          {loading ? (
+            <p className="admin-empty" role="status">
+              Chargement des horaires…
+            </p>
+          ) : error ? (
+            <p className="form-error" role="alert">{error}</p>
+          ) : schedule ? (
+            <div className="schedule-groups">
+              <section
+                className="schedule-venue"
+                aria-labelledby="adultes-heading"
               >
-                <div className="schedule-line schedule-heading" role="row">
-                  <span role="columnheader">Jour</span>
-                  <span role="columnheader">Horaires</span>
-                  <span role="columnheader">Séance</span>
-                </div>
-                <div className="schedule-line" role="row">
-                  <strong role="rowheader">Lundi</strong>
-                  <span role="cell">18h30–20h</span>
-                  <span role="cell">Initiation débutant</span>
-                </div>
-                <div className="schedule-line" role="row">
-                  <strong role="rowheader"></strong>
-                  <span role="cell">20h–22h</span>
-                  <span role="cell">Jeu libre · priorité débutants</span>
-                </div>
-                <div className="schedule-line" role="row">
-                  <strong role="rowheader">Mardi</strong>
-                  <span role="cell">18h30–22h</span>
-                  <span role="cell">Jeu libre jeunes et adultes</span>
-                </div>
-                <div className="schedule-line" role="row">
-                  <strong role="rowheader">Mercredi</strong>
-                  <span role="cell">18h30–22h</span>
-                  <span role="cell">Jeu libre jeunes et adultes</span>
-                </div>
-                <div className="schedule-line" role="row">
-                  <strong role="rowheader">Jeudi</strong>
-                  <span role="cell">18h30h–22h</span>
-                  <span role="cell">Jeu libre jeunes et adultes</span>
-                </div>
-                <div className="schedule-line" role="row">
-                  <strong role="rowheader">Vendredi</strong>
-                  <span role="cell">18h–20h</span>
-                  <span role="cell">Jeu libre jeunes et adultes</span>
-                </div>
-              </div>
-            </section>
-            <section
-              className="schedule-venue"
-              aria-labelledby="jeunes-heading"
-            >
-              <h3 id="jeunes-heading">Jeunes · Gymnase Jean Monnet</h3>
-              <p className="venue-address">
-                Collège Jean Monnet · Cognac · École Française de Badminton
-              </p>
-              <div
-                className="schedule-table"
-                role="table"
-                aria-label="Horaires jeunes à Jean Monnet"
+                <h3 id="adultes-heading">{schedule.adultVenue}</h3>
+                <p className="venue-address">{schedule.adultAddress}</p>
+                <ScheduleTable
+                  title="adultes · Beaulieu"
+                  thirdColumnLabel="Séance"
+                  slots={schedule.adultSlots}
+                />
+              </section>
+              <section
+                className="schedule-venue"
+                aria-labelledby="jeunes-heading"
               >
-                <div className="schedule-line schedule-heading" role="row">
-                  <span role="columnheader">Jour</span>
-                  <span role="columnheader">Horaires</span>
-                  <span role="columnheader">Âge</span>
-                </div>
-                <div className="schedule-line" role="row">
-                  <strong role="rowheader">Mardi</strong>
-                  <span role="cell">18h15–19h45</span>
-                  <span role="cell">5–10 ans</span>
-                </div>
-                <div className="schedule-line" role="row">
-                  <strong role="rowheader">Jeudi</strong>
-                  <span role="cell">18h15–19h45</span>
-                  <span role="cell">11–17 ans</span>
-                </div>
-              </div>
-              <p className="schedule-footnote">
-                Au-delà de 17 ans, les joueurs sont accueillis sur les créneaux
-                adultes.
-              </p>
-            </section>
-          </div>
+                <h3 id="jeunes-heading">{schedule.youthVenue}</h3>
+                <p className="venue-address">{schedule.youthAddress}</p>
+                <ScheduleTable
+                  title="jeunes · Jean Monnet"
+                  thirdColumnLabel="Âge"
+                  slots={schedule.youthSlots}
+                />
+                {schedule.youthNote && (
+                  <p className="schedule-footnote">{schedule.youthNote}</p>
+                )}
+              </section>
+            </div>
+          ) : null}
         </div>
       </section>
     </>
@@ -1355,6 +1472,19 @@ function formatTeamDate(date: string) {
   }).format(new Date(year, month - 1, day, 12));
 }
 
+function getMatchResultClass(match: TeamData["matches"][number]): string {
+  const score = match.score.match(/^\s*(\d+)\s*[-–—:]\s*(\d+)\s*$/);
+  if (!score) return "";
+  const homeScore = Number(score[1]);
+  const awayScore = Number(score[2]);
+  if (homeScore === awayScore) return "team-match-score-draw";
+  const clubScore = match.home ? homeScore : awayScore;
+  const opponentScore = match.home ? awayScore : homeScore;
+  return clubScore > opponentScore
+    ? "team-match-score-win"
+    : "team-match-score-loss";
+}
+
 function renderStandingPlace(position: string) {
   const place = Number.parseInt(position, 10);
   const medal =
@@ -1377,8 +1507,25 @@ function renderStandingPlace(position: string) {
   );
 }
 
-type PlayerSortKey = "name" | "role";
+type PlayerSortKey = "name" | "single" | "double" | "mixed";
 type PlayerSort = { key: PlayerSortKey; direction: "ascending" | "descending" };
+
+function getPlayerRankings(role?: string): [string, string, string] {
+  const rankings = (role ?? "")
+    .split(/\s*[·•]\s*/)
+    .map((ranking) => ranking.trim());
+  return [rankings[0] ?? "", rankings[1] ?? "", rankings[2] ?? ""];
+}
+
+function getRankingClass(ranking: string): string {
+  const normalizedRanking = ranking.toUpperCase();
+  if (/^N[1-3]$/.test(normalizedRanking)) return "team-ranking-national";
+  if (/^R[4-6]$/.test(normalizedRanking)) return "team-ranking-regional";
+  if (/^D[7-9]$/.test(normalizedRanking)) return "team-ranking-departmental";
+  if (/^P(10|11|12)$/.test(normalizedRanking)) return "team-ranking-promotion";
+  if (normalizedRanking === "NC") return "team-ranking-unclassified";
+  return "";
+}
 
 function TeamDetails() {
   const { teamId } = useParams();
@@ -1397,15 +1544,29 @@ function TeamDetails() {
     direction: "ascending",
   });
   const sortedPlayers = useMemo(
-    () =>
-      [...(data?.players ?? [])].sort((first, second) => {
-        const comparison = (first[playerSort.key] ?? "").localeCompare(
-          second[playerSort.key] ?? "",
+    () => {
+      const rankingIndex = {
+        single: 0,
+        double: 1,
+        mixed: 2,
+      } as const;
+      return [...(data?.players ?? [])].sort((first, second) => {
+        const firstValue =
+          playerSort.key === "name"
+            ? first.name
+            : getPlayerRankings(first.role)[rankingIndex[playerSort.key]];
+        const secondValue =
+          playerSort.key === "name"
+            ? second.name
+            : getPlayerRankings(second.role)[rankingIndex[playerSort.key]];
+        const comparison = (firstValue ?? "").localeCompare(
+          secondValue ?? "",
           "fr",
           { sensitivity: "base", numeric: true },
         );
         return playerSort.direction === "ascending" ? comparison : -comparison;
-      }),
+      });
+    },
     [data?.players, playerSort],
   );
   if (loading)
@@ -1486,18 +1647,25 @@ function TeamDetails() {
                 <h2>Composition</h2>
                 {data?.players?.length ? (
                   <div className="team-table-wrap">
-                    <table className="team-table">
-                      <caption>Joueurs de l’équipe {team.shortName}</caption>
+                    <table
+                      className="team-table"
+                      aria-label={`Joueurs de l’équipe ${team.shortName}`}
+                    >
                       <thead>
                         <tr>
                           {(
                             [
                               ["name", "Joueur"],
-                              ["role", "Classements FFBaD (S · D · M)"],
+                              ["single", "Simple"],
+                              ["double", "Double"],
+                              ["mixed", "Mixte"],
                             ] as const
                           ).map(([key, label]) => (
                             <th
                               key={key}
+                              className={
+                                key === "name" ? undefined : "team-ranking-column"
+                              }
                               scope="col"
                               aria-sort={
                                 playerSort.key === key
@@ -1573,7 +1741,24 @@ function TeamDetails() {
                                 {player.name}
                               </span>
                             </td>
-                            <td>{player.role || "—"}</td>
+                            {getPlayerRankings(player.role).map(
+                              (ranking, rankingIndex) => (
+                                <td
+                                  key={`${player.name}-${rankingIndex}`}
+                                  className="team-ranking-column"
+                                >
+                                  {ranking ? (
+                                    <span
+                                      className={`team-ranking ${getRankingClass(ranking)}`}
+                                    >
+                                      {ranking}
+                                    </span>
+                                  ) : (
+                                    "—"
+                                  )}
+                                </td>
+                              ),
+                            )}
                           </tr>
                         ))}
                       </tbody>
@@ -1589,21 +1774,31 @@ function TeamDetails() {
                 <h2>Classement</h2>
                 {data?.standings?.length ? (
                   <div className="team-table-wrap">
-                    <table className="team-table">
-                      <caption>
-                        Classement de la division de l’équipe {team.shortName}
-                      </caption>
+                    <table
+                      className="team-table"
+                      aria-label={`Classement de la division de l’équipe ${team.shortName}`}
+                    >
                       <thead>
                         <tr>
                           <th className="team-rank-cell" scope="col">
                             Place
                           </th>
                           <th scope="col">Équipe</th>
-                          <th scope="col">Jouées</th>
-                          <th scope="col">Gagnées</th>
-                          <th scope="col">Nulles</th>
-                          <th scope="col">Perdues</th>
-                          <th scope="col">Points</th>
+                          <th className="team-table-center-cell" scope="col">
+                            Jouées
+                          </th>
+                          <th className="team-table-center-cell" scope="col">
+                            Gagnées
+                          </th>
+                          <th className="team-table-center-cell" scope="col">
+                            Nulles
+                          </th>
+                          <th className="team-table-center-cell" scope="col">
+                            Perdues
+                          </th>
+                          <th className="team-table-center-cell" scope="col">
+                            Points
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1613,11 +1808,21 @@ function TeamDetails() {
                               {renderStandingPlace(standing.position)}
                             </td>
                             <td>{standing.team}</td>
-                            <td>{standing.played}</td>
-                            <td>{standing.won}</td>
-                            <td>{standing.drawn}</td>
-                            <td>{standing.lost}</td>
-                            <td>{standing.points}</td>
+                            <td className="team-table-center-cell">
+                              {standing.played}
+                            </td>
+                            <td className="team-table-center-cell">
+                              {standing.won}
+                            </td>
+                            <td className="team-table-center-cell">
+                              {standing.drawn}
+                            </td>
+                            <td className="team-table-center-cell">
+                              {standing.lost}
+                            </td>
+                            <td className="team-table-center-cell">
+                              {standing.points}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1633,17 +1838,21 @@ function TeamDetails() {
                 <h2>Calendrier et résultats</h2>
                 {data?.matches?.length ? (
                   <div className="team-table-wrap">
-                    <table className="team-table">
-                      <caption>
-                        Rencontres de l’équipe {team.shortName}
-                      </caption>
+                    <table
+                      className="team-table"
+                      aria-label={`Rencontres de l’équipe ${team.shortName}`}
+                    >
                       <thead>
                         <tr>
                           <th scope="col">Date</th>
                           <th scope="col">Rencontre</th>
                           <th scope="col">Lieu</th>
-                          <th scope="col">Position</th>
-                          <th scope="col">Résultat</th>
+                          <th
+                            className="team-table-center-cell"
+                            scope="col"
+                          >
+                            Résultat
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1657,11 +1866,28 @@ function TeamDetails() {
                             >
                               <td>{formatTeamDate(match.date)}</td>
                               <td>{match.opponent}</td>
-                              <td>{match.location || "—"}</td>
                               <td>
-                                {match.home ? "Domicile" : "Extérieur"}
+                                <span className="team-match-location">
+                                  {match.home ? (
+                                    <House size={16} aria-hidden="true" />
+                                  ) : (
+                                    <Plane size={16} aria-hidden="true" />
+                                  )}
+                                  <span className="visually-hidden">
+                                    {match.home
+                                      ? "À domicile : "
+                                      : "En déplacement : "}
+                                  </span>
+                                  {match.location || "—"}
+                                </span>
                               </td>
-                              <td>{match.score || "À venir"}</td>
+                              <td className="team-table-center-cell">
+                                <span
+                                  className={`team-match-score ${getMatchResultClass(match)}`}
+                                >
+                                  {match.score || "À venir"}
+                                </span>
+                              </td>
                             </tr>
                           ))}
                       </tbody>
@@ -1826,7 +2052,6 @@ function ArticleDetail() {
             <ArrowRight className="back-arrow" size={16} /> Toutes les
             actualités
           </Link>
-          <span className="eyebrow article-category">{article.category}</span>
           <h1>{article.title}</h1>
           <div className="article-meta">
             <time dateTime={article.date}>
@@ -1838,12 +2063,19 @@ function ArticleDetail() {
             </time>
             <span>Par {article.author}</span>
           </div>
-          {article.image && (
+          {article.image ? (
             <img
               className="article-cover"
               src={article.image}
               alt={article.title}
             />
+          ) : (
+            <div className="article-cover-empty">
+              <img
+                src={`${import.meta.env.BASE_URL}logo.png`}
+                alt="Logo Cognac Badminton utilisé comme illustration"
+              />
+            </div>
           )}
           <p className="article-excerpt">{article.excerpt}</p>
           <div className="article-content">
@@ -2217,7 +2449,9 @@ function BoardMembersManager() {
   const [editing, setEditing] = useState<BoardMember | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [cropSource, setCropSource] = useState<File | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
   const [photoPreview, setPhotoPreview] = useState("");
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -2272,8 +2506,8 @@ function BoardMembersManager() {
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
     const role = String(form.get("role") ?? "").trim();
-    if (!name || !role || (!editing?.photoUrl && !photoFile)) {
-      setError("Renseignez le nom, la fonction et une photo pour ce membre.");
+    if (!name || !role) {
+      setError("Renseignez le nom et la fonction de ce membre.");
       return;
     }
     if (cropSource) {
@@ -2285,9 +2519,10 @@ function BoardMembersManager() {
     setSaving(true);
     try {
       const photoUrl = photoFile
-        ? await uploadBoardMemberPhoto(photoFile)
-        : editing?.photoUrl;
-      if (!photoUrl) throw new Error("La photo de ce membre est obligatoire.");
+        ? await uploadClubImage(photoFile)
+        : removePhoto
+          ? ""
+          : editing?.photoUrl ?? "";
       const memberOrder =
         editing?.order ??
         members.findIndex((member) => member.id === editing?.id);
@@ -2329,6 +2564,9 @@ function BoardMembersManager() {
       );
       setEditing(null);
       setPhotoFile(null);
+      setCropSource(null);
+      setRemovePhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
       setNotice("Membre du bureau enregistré.");
     } catch (saveError) {
       setError(
@@ -2402,6 +2640,8 @@ function BoardMembersManager() {
       if (editing?.id === member.id) {
         setEditing(null);
         setPhotoFile(null);
+        setCropSource(null);
+        setRemovePhoto(false);
       }
       setNotice("Membre retiré du site.");
     } catch {
@@ -2423,15 +2663,24 @@ function BoardMembersManager() {
       setError("La photo ne doit pas dépasser 5 Mo.");
       return;
     }
+    setRemovePhoto(false);
     setCropSource(file);
+  }
+
+  function clearPhoto() {
+    setPhotoFile(null);
+    setCropSource(null);
+    setRemovePhoto(true);
+    if (photoInputRef.current) photoInputRef.current.value = "";
   }
 
   return (
     <section className="board-admin">
       {!cloudinaryCloudName || !cloudinaryUploadPreset ? (
-        <p className="form-error" role="status">
-          Configurez VITE_CLOUDINARY_CLOUD_NAME et VITE_CLOUDINARY_UPLOAD_PRESET
-          pour activer le téléversement des photos.
+        <p className="board-upload-notice" role="status">
+          Le téléversement de portraits est désactivé faute de configuration
+          Cloudinary ; vous pouvez tout de même ajouter ou modifier un membre
+          sans photo.
         </p>
       ) : null}
       {notice && (
@@ -2446,7 +2695,8 @@ function BoardMembersManager() {
       )}
       <p className="board-order-help">
         Glissez les membres pour modifier leur ordre d’affichage, ou utilisez
-        les boutons Monter et Descendre.
+        les boutons Monter et Descendre. La photo est facultative : le logo du
+        club s’affiche en son absence.
       </p>
       <div className="admin-list" aria-live="polite">
         {loading ? (
@@ -2483,64 +2733,70 @@ function BoardMembersManager() {
                 setDragOverMemberId(null);
               }}
             >
-              <img src={member.photoUrl} alt="" />
-              <div>
-                <strong>{member.name}</strong>
-                <span>{member.role}</span>
+              <div className="board-member-identity">
+                <BoardMemberPhoto member={member} />
+                <div>
+                  <strong>{member.name}</strong>
+                  <span>{member.role}</span>
+                </div>
               </div>
-              <div
-                className="board-order-actions"
-                aria-label={`Ordre de ${member.name}`}
-              >
+              <div className="board-member-controls">
                 <button
                   type="button"
-                  aria-label={`Monter ${member.name}`}
-                  title="Monter"
-                  disabled={savingOrder || index === 0}
-                  onClick={() =>
-                    void reorderMember(
-                      member.id,
-                      members[index - 1]?.id ?? member.id,
-                    )
-                  }
+                  disabled={savingOrder}
+                  onClick={() => {
+                    setEditing(member);
+                    setPhotoFile(null);
+                    setCropSource(null);
+                    setRemovePhoto(false);
+                    setError("");
+                    setNotice("");
+                  }}
                 >
-                  ↑
+                  Modifier
                 </button>
                 <button
                   type="button"
-                  aria-label={`Descendre ${member.name}`}
-                  title="Descendre"
-                  disabled={savingOrder || index === members.length - 1}
-                  onClick={() =>
-                    void reorderMember(
-                      member.id,
-                      members[index + 1]?.id ?? member.id,
-                    )
-                  }
+                  className="delete-action"
+                  disabled={savingOrder}
+                  onClick={() => remove(member)}
                 >
-                  ↓
+                  Supprimer
                 </button>
+                <div
+                  className="board-order-actions"
+                  aria-label={`Ordre de ${member.name}`}
+                >
+                  <button
+                    type="button"
+                    aria-label={`Monter ${member.name}`}
+                    title="Monter"
+                    disabled={savingOrder || index === 0}
+                    onClick={() =>
+                      void reorderMember(
+                        member.id,
+                        members[index - 1]?.id ?? member.id,
+                      )
+                    }
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Descendre ${member.name}`}
+                    title="Descendre"
+                    disabled={savingOrder || index === members.length - 1}
+                    onClick={() =>
+                      void reorderMember(
+                        member.id,
+                        members[index + 1]?.id ?? member.id,
+                      )
+                    }
+                  >
+                    ↓
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                disabled={savingOrder}
-                onClick={() => {
-                  setEditing(member);
-                  setPhotoFile(null);
-                  setError("");
-                  setNotice("");
-                }}
-              >
-                Modifier
-              </button>
-              <button
-                type="button"
-                className="delete-action"
-                disabled={savingOrder}
-                onClick={() => remove(member)}
-              >
-                Supprimer
-              </button>
             </div>
           ))
         )}
@@ -2575,60 +2831,83 @@ function BoardMembersManager() {
         <label>
           Photo (JPG, PNG ou WebP, 5 Mo maximum)
           <input
+            ref={photoInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
-            required={!editing?.photoUrl}
             onChange={(event) => choosePhoto(event.currentTarget.files?.[0])}
           />
         </label>
         {cropSource && (
           <ImageCropper
             file={cropSource}
-            onCancel={() => setCropSource(null)}
+            onCancel={() => {
+              setCropSource(null);
+              if (photoInputRef.current) photoInputRef.current.value = "";
+            }}
             onComplete={(file) => {
               setPhotoFile(file);
               setCropSource(null);
             }}
           />
         )}
-        {(photoPreview || editing?.photoUrl) && (
-          <img
-            className="board-photo-preview"
-            src={photoPreview || editing?.photoUrl}
-            alt="Aperçu de la photo du membre"
-          />
-        )}
-        <button
-          className="button button-copper"
-          type="submit"
-          disabled={
-            saving ||
-            loading ||
-            Boolean(cropSource) ||
-            ((!cloudinaryCloudName || !cloudinaryUploadPreset) &&
-              (!editing?.photoUrl || Boolean(photoFile)))
+        <img
+          className={`board-photo-preview${(!removePhoto && (photoPreview || editing?.photoUrl)) ? "" : " board-photo-placeholder"}`}
+          src={
+            (removePhoto ? "" : photoPreview) ||
+            (removePhoto ? "" : editing?.photoUrl) ||
+            `${import.meta.env.BASE_URL}logo.png`
           }
-        >
-          {saving
-            ? "Enregistrement…"
-            : editing
-              ? "Enregistrer les modifications"
-              : "Ajouter au bureau"}{" "}
-          <ArrowRight size={16} />
-        </button>
-        {editing && (
+          alt={
+            photoPreview || (editing?.photoUrl && !removePhoto)
+              ? "Aperçu de la photo du membre"
+              : "Logo Cognac Badminton utilisé sans portrait"
+          }
+        />
+        <div className="photo-form-actions">
+          {(photoFile || cropSource || editing?.photoUrl) && (
+            <button
+              className="button button-outline photo-remove-button"
+              type="button"
+              onClick={clearPhoto}
+              disabled={saving}
+            >
+              Supprimer la photo
+            </button>
+          )}
           <button
-            type="button"
-            className="cancel-edit"
-            onClick={() => {
-              setEditing(null);
-              setPhotoFile(null);
-              setError("");
-            }}
+            className="button button-copper"
+            type="submit"
+            disabled={
+              saving ||
+              loading ||
+              Boolean(cropSource) ||
+              (Boolean(photoFile) &&
+                (!cloudinaryCloudName || !cloudinaryUploadPreset))
+            }
           >
-            Annuler
+            {saving
+              ? "Enregistrement…"
+              : editing
+                ? "Enregistrer les modifications"
+                : "Ajouter au bureau"}{" "}
+            <ArrowRight size={16} />
           </button>
-        )}
+          {editing && (
+            <button
+              type="button"
+              className="cancel-edit"
+              onClick={() => {
+                setEditing(null);
+                setPhotoFile(null);
+                setCropSource(null);
+                setRemovePhoto(false);
+                setError("");
+              }}
+            >
+              Annuler
+            </button>
+          )}
+        </div>
       </form>
     </section>
   );
@@ -2973,8 +3252,8 @@ function PrivacyPolicy() {
               aux prestataires nécessaires au fonctionnement du site :
               Web3Forms pour transmettre les messages, Google Firebase pour
               l’authentification webmaster et les contenus administrés,
-              Cloudinary pour héberger les photographies du bureau, GitHub
-              Pages pour l’hébergement du site et Cloudflare pour la
+              Cloudinary pour héberger les photos des actualités et du bureau,
+              GitHub Pages pour l’hébergement du site et Cloudflare pour la
               synchronisation des données sportives publiques. Les images
               hébergées par Unsplash sont chargées depuis leurs serveurs. Ces
               prestataires peuvent traiter des données techniques de connexion
@@ -3071,6 +3350,248 @@ function PrivacyPolicy() {
         </div>
       </section>
     </>
+  );
+}
+
+function ScheduleManager() {
+  const {
+    schedule: loadedSchedule,
+    error: loadError,
+    loading,
+  } = useWeeklySchedule();
+  const [schedule, setSchedule] = useState<WeeklySchedule>(
+    defaultWeeklySchedule,
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    if (loadedSchedule) setSchedule(loadedSchedule);
+  }, [loadedSchedule]);
+
+  function updateSchedule<K extends keyof WeeklySchedule>(
+    key: K,
+    value: WeeklySchedule[K],
+  ) {
+    setSchedule((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateSlot(
+    group: "adultSlots" | "youthSlots",
+    index: number,
+    key: keyof ScheduleSlot,
+    value: string,
+  ) {
+    setSchedule((current) => ({
+      ...current,
+      [group]: current[group].map((slot, slotIndex) =>
+        slotIndex === index ? { ...slot, [key]: value } : slot,
+      ),
+    }));
+  }
+
+  function addSlot(group: "adultSlots" | "youthSlots") {
+    setSchedule((current) => ({
+      ...current,
+      [group]: [...current[group], { day: "", time: "", activity: "" }],
+    }));
+  }
+
+  function removeSlot(group: "adultSlots" | "youthSlots", index: number) {
+    setSchedule((current) => ({
+      ...current,
+      [group]: current[group].filter((_, slotIndex) => slotIndex !== index),
+    }));
+  }
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!db) {
+      setError("Firebase Firestore n’est pas configuré.");
+      return;
+    }
+    setError("");
+    setNotice("");
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "siteContent", "schedule"), {
+        ...schedule,
+        updatedAt: serverTimestamp(),
+      });
+      setNotice("Les horaires ont été enregistrés.");
+    } catch (saveError) {
+      setError(
+        isFirestorePermissionDenied(saveError)
+          ? "Firestore a refusé l’enregistrement. Publiez firestore.rules et vérifiez votre rôle webmaster."
+          : "Impossible d’enregistrer les horaires. Vérifiez votre connexion et les règles Firestore.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function renderSlots(group: "adultSlots" | "youthSlots", label: string) {
+    return (
+      <fieldset className="schedule-editor-group">
+        <legend>{label}</legend>
+        {schedule[group].map((slot, index) => (
+          <div className="schedule-editor-row" key={`${group}-${index}`}>
+            <label>
+              Jour
+              <input
+                value={slot.day}
+                onChange={(event) =>
+                  updateSlot(group, index, "day", event.target.value)
+                }
+                maxLength={30}
+                required
+              />
+            </label>
+            <label>
+              Horaires
+              <input
+                value={slot.time}
+                onChange={(event) =>
+                  updateSlot(group, index, "time", event.target.value)
+                }
+                maxLength={50}
+                required
+              />
+            </label>
+            <label>
+              {group === "adultSlots" ? "Séance" : "Âge / séance"}
+              <input
+                value={slot.activity}
+                onChange={(event) =>
+                  updateSlot(group, index, "activity", event.target.value)
+                }
+                maxLength={100}
+                required
+              />
+            </label>
+            <button
+              type="button"
+              className="delete-action"
+              aria-label={`Supprimer le créneau ${slot.day || index + 1}`}
+              onClick={() => removeSlot(group, index)}
+            >
+              Supprimer
+            </button>
+          </div>
+        ))}
+        <button
+          className="button button-outline schedule-add-slot"
+          type="button"
+          onClick={() => addSlot(group)}
+          disabled={schedule[group].length >= 30}
+        >
+          Ajouter un créneau <ArrowRight size={16} />
+        </button>
+      </fieldset>
+    );
+  }
+
+  return (
+    <section className="schedule-admin">
+      <p className="board-order-help">
+        Modifiez les lieux et les créneaux ci-dessous. Les changements seront
+        visibles sur la page publique après enregistrement.
+      </p>
+      {loadError && (
+        <p className="form-error" role="alert">
+          {loadError}
+        </p>
+      )}
+      {notice && (
+        <p className="form-success" role="status">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      {loading ? (
+        <p className="admin-empty" role="status">
+          Chargement des horaires…
+        </p>
+      ) : (
+        <form className="admin-editor" onSubmit={save}>
+          <h3>Horaires adultes</h3>
+          <div className="form-row">
+            <label>
+              Titre du lieu
+              <input
+                value={schedule.adultVenue}
+                onChange={(event) =>
+                  updateSchedule("adultVenue", event.target.value)
+                }
+                maxLength={120}
+                required
+              />
+            </label>
+            <label>
+              Adresse
+              <input
+                value={schedule.adultAddress}
+                onChange={(event) =>
+                  updateSchedule("adultAddress", event.target.value)
+                }
+                maxLength={200}
+                required
+              />
+            </label>
+          </div>
+          {renderSlots("adultSlots", "Créneaux adultes")}
+          <h3>Horaires jeunes</h3>
+          <div className="form-row">
+            <label>
+              Titre du lieu
+              <input
+                value={schedule.youthVenue}
+                onChange={(event) =>
+                  updateSchedule("youthVenue", event.target.value)
+                }
+                maxLength={120}
+                required
+              />
+            </label>
+            <label>
+              Adresse et informations
+              <input
+                value={schedule.youthAddress}
+                onChange={(event) =>
+                  updateSchedule("youthAddress", event.target.value)
+                }
+                maxLength={200}
+                required
+              />
+            </label>
+          </div>
+          {renderSlots("youthSlots", "Créneaux jeunes")}
+          <label>
+            Note sous les horaires jeunes (facultatif)
+            <input
+              value={schedule.youthNote}
+              onChange={(event) =>
+                updateSchedule("youthNote", event.target.value)
+              }
+              maxLength={300}
+            />
+          </label>
+          <button
+            className="button button-copper"
+            type="submit"
+            disabled={saving || loading || Boolean(loadError)}
+          >
+            {saving ? "Enregistrement…" : "Enregistrer les horaires"}{" "}
+            <ArrowRight size={16} />
+          </button>
+        </form>
+      )}
+    </section>
   );
 }
 
@@ -3221,6 +3742,11 @@ function Webmaster() {
   const [activeTab, setActiveTab] = useState<WebmasterTab>("articles");
   const [items, setItems] = useState<Article[]>([]);
   const [editing, setEditing] = useState<Article | null>(null);
+  const [articlePhotoFile, setArticlePhotoFile] = useState<File | null>(null);
+  const [articleCropSource, setArticleCropSource] = useState<File | null>(null);
+  const [articlePhotoPreview, setArticlePhotoPreview] = useState("");
+  const [removeArticleImage, setRemoveArticleImage] = useState(false);
+  const articlePhotoInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loginEmail, setLoginEmail] = useState("");
@@ -3228,6 +3754,16 @@ function Webmaster() {
   const [resetPending, setResetPending] = useState(false);
   const [loadingItems, setLoadingItems] = useState(false);
   const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!articlePhotoFile) {
+      setArticlePhotoPreview("");
+      return;
+    }
+    const previewUrl = URL.createObjectURL(articlePhotoFile);
+    setArticlePhotoPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [articlePhotoFile]);
+
   useEffect(() => {
     if (!user || !role || !db) return;
     let active = true;
@@ -3299,21 +3835,34 @@ function Webmaster() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!db) return;
+    if (articleCropSource) {
+      setError("Validez ou annulez le recadrage avant d’enregistrer.");
+      return;
+    }
     setError("");
     setNotice("");
     setSaving(true);
     const form = new FormData(event.currentTarget);
     const article = {
       title: String(form.get("title")),
-      category: String(form.get("category")),
       date: String(form.get("date")),
       author: String(form.get("author")),
       excerpt: String(form.get("excerpt")),
-      image: String(form.get("image")),
+      image: articlePhotoFile
+        ? ""
+        : removeArticleImage
+          ? ""
+          : editing?.image ?? "",
       content: String(form.get("content")),
     };
     try {
-      if (editing) await updateDoc(doc(db, "articles", editing.id), article);
+      if (articlePhotoFile)
+        article.image = await uploadClubImage(articlePhotoFile);
+      if (editing)
+        await updateDoc(doc(db, "articles", editing.id), {
+          ...article,
+          category: deleteField(),
+        });
       else await addDoc(collection(db, "articles"), article);
       const snapshot = await getDocs(
         query(collection(db, "articles"), orderBy("date", "desc")),
@@ -3324,14 +3873,54 @@ function Webmaster() {
         ),
       );
       setEditing(null);
+      setArticlePhotoFile(null);
+      setArticleCropSource(null);
+      setRemoveArticleImage(false);
+      if (articlePhotoInputRef.current)
+        articlePhotoInputRef.current.value = "";
       setNotice("Article enregistré.");
-    } catch {
+    } catch (saveError) {
       setError(
-        "Enregistrement refusé. Vérifiez les droits de votre compte administrateur.",
+        isFirestorePermissionDenied(saveError)
+          ? "Enregistrement refusé. Vérifiez les droits de votre compte webmaster."
+          : saveError instanceof Error
+            ? saveError.message
+            : "Impossible d’enregistrer l’article.",
       );
     } finally {
       setSaving(false);
     }
+  }
+  function chooseArticlePhoto(file: File | undefined) {
+    setError("");
+    if (!file) {
+      setArticleCropSource(null);
+      return;
+    }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choisissez une image au format JPG, PNG ou WebP.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("La photo ne doit pas dépasser 5 Mo.");
+      return;
+    }
+    setRemoveArticleImage(false);
+    setArticleCropSource(file);
+  }
+  function clearArticlePhoto() {
+    setArticlePhotoFile(null);
+    setArticleCropSource(null);
+    setRemoveArticleImage(true);
+    if (articlePhotoInputRef.current)
+      articlePhotoInputRef.current.value = "";
+  }
+  function resetArticlePhoto() {
+    setArticlePhotoFile(null);
+    setArticleCropSource(null);
+    setRemoveArticleImage(false);
+    if (articlePhotoInputRef.current)
+      articlePhotoInputRef.current.value = "";
   }
   async function remove(id: string) {
     if (
@@ -3354,8 +3943,8 @@ function Webmaster() {
   function handleTabKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
     const tabs: WebmasterTab[] =
       role === "admin"
-        ? ["articles", "board", "events", "teams"]
-        : ["articles", "board", "events"];
+        ? ["articles", "board", "events", "schedule", "teams"]
+        : ["articles", "board", "events", "schedule"];
     const currentIndex = tabs.indexOf(activeTab);
     const nextIndex =
       event.key === "ArrowRight"
@@ -3540,6 +4129,18 @@ function Webmaster() {
                 >
                   Évènements
                 </button>
+                <button
+                  id="webmaster-tab-schedule"
+                  className="webmaster-tab"
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === "schedule"}
+                  aria-controls="webmaster-schedule-panel"
+                  tabIndex={activeTab === "schedule" ? 0 : -1}
+                  onClick={() => setActiveTab("schedule")}
+                >
+                  Horaires
+                </button>
                 {role === "admin" && (
                   <button
                     id="webmaster-tab-teams"
@@ -3585,14 +4186,13 @@ function Webmaster() {
                         <div className="admin-item" key={item.id}>
                           <div>
                             <strong>{item.title}</strong>
-                            <span>
-                              {item.date} · {item.category}
-                            </span>
+                            <span>{item.date}</span>
                           </div>
                           <button
                             type="button"
                             onClick={() => {
                               setEditing(item);
+                              resetArticlePhoto();
                               window.scrollTo({ top: 0, behavior: "smooth" });
                             }}
                           >
@@ -3621,24 +4221,14 @@ function Webmaster() {
                         ? "Modifier une actualité"
                         : "Nouvelle actualité"}
                     </h3>
-                    <div className="form-row">
-                      <label>
-                        Titre
-                        <input
-                          name="title"
-                          defaultValue={editing?.title}
-                          required
-                        />
-                      </label>
-                      <label>
-                        Catégorie
-                        <input
-                          name="category"
-                          defaultValue={editing?.category}
-                          required
-                        />
-                      </label>
-                    </div>
+                    <label>
+                      Titre
+                      <input
+                        name="title"
+                        defaultValue={editing?.title}
+                        required
+                      />
+                    </label>
                     <div className="form-row">
                       <label>
                         Date
@@ -3662,14 +4252,65 @@ function Webmaster() {
                       </label>
                     </div>
                     <label>
-                      URL de l’image (facultatif)
+                      Photo (facultative · JPG, PNG ou WebP, 5 Mo maximum)
                       <input
-                        type="url"
-                        name="image"
-                        defaultValue={editing?.image ?? ""}
-                        placeholder="https://…"
+                        ref={articlePhotoInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(event) =>
+                          chooseArticlePhoto(event.currentTarget.files?.[0])
+                        }
                       />
                     </label>
+                    {(!cloudinaryCloudName || !cloudinaryUploadPreset) && (
+                      <p className="board-upload-notice" role="status">
+                        Le téléversement de photos est désactivé faute de
+                        configuration Cloudinary ; vous pouvez publier une
+                        actualité sans photo.
+                      </p>
+                    )}
+                    {articleCropSource && (
+                      <ImageCropper
+                        file={articleCropSource}
+                        onCancel={() => {
+                          setArticleCropSource(null);
+                          if (articlePhotoInputRef.current)
+                            articlePhotoInputRef.current.value = "";
+                        }}
+                        onComplete={(file) => {
+                          setArticlePhotoFile(file);
+                          setArticleCropSource(null);
+                        }}
+                      />
+                    )}
+                    <img
+                      className={`article-photo-preview${!removeArticleImage && (articlePhotoPreview || editing?.image) ? "" : " board-photo-placeholder"}`}
+                      src={
+                        (removeArticleImage ? "" : articlePhotoPreview) ||
+                        (removeArticleImage ? "" : editing?.image) ||
+                        `${import.meta.env.BASE_URL}logo.png`
+                      }
+                      alt={
+                        !removeArticleImage &&
+                        (articlePhotoPreview || editing?.image)
+                          ? "Aperçu de la photo de l’actualité"
+                          : "Logo Cognac Badminton utilisé sans photo"
+                      }
+                    />
+                    {(articlePhotoFile ||
+                      articleCropSource ||
+                      editing?.image) && (
+                      <div className="photo-form-actions photo-form-actions-single">
+                        <button
+                          className="button button-outline photo-remove-button"
+                          type="button"
+                          onClick={clearArticlePhoto}
+                          disabled={saving}
+                        >
+                          Supprimer la photo
+                        </button>
+                      </div>
+                    )}
                     <label>
                       Résumé
                       <textarea
@@ -3683,7 +4324,13 @@ function Webmaster() {
                     <button
                       className="button button-copper"
                       type="submit"
-                      disabled={saving || loadingItems}
+                      disabled={
+                        saving ||
+                        loadingItems ||
+                        Boolean(articleCropSource) ||
+                        (Boolean(articlePhotoFile) &&
+                          (!cloudinaryCloudName || !cloudinaryUploadPreset))
+                      }
                     >
                       {saving
                         ? "Enregistrement…"
@@ -3696,7 +4343,11 @@ function Webmaster() {
                       <button
                         type="button"
                         className="cancel-edit"
-                        onClick={() => setEditing(null)}
+                        onClick={() => {
+                          setEditing(null);
+                          resetArticlePhoto();
+                          setError("");
+                        }}
                       >
                         Annuler la modification
                       </button>
@@ -3720,6 +4371,15 @@ function Webmaster() {
                   className="webmaster-panel"
                 >
                   <EventsManager role={role} />
+                </section>
+              ) : activeTab === "schedule" ? (
+                <section
+                  id="webmaster-schedule-panel"
+                  role="tabpanel"
+                  aria-labelledby="webmaster-tab-schedule"
+                  className="webmaster-panel"
+                >
+                  <ScheduleManager />
                 </section>
               ) : role === "admin" ? (
                 <section
@@ -4063,12 +4723,35 @@ function UserManagement() {
   );
 }
 
+function NotFound() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => navigate("/", { replace: true }), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [navigate]);
+
+  return (
+    <section className="not-found">
+      <h1>Cette page n’existe pas.</h1>
+      <div className="not-found-redirect" role="status" aria-live="polite">
+        <span className="not-found-loader" aria-hidden="true" />
+        <p>Redirection vers l’accueil dans 5 secondes…</p>
+      </div>
+      <Link className="text-link" to="/">
+        Retourner à l’accueil maintenant <ArrowRight />
+      </Link>
+    </section>
+  );
+}
+
 export default function App() {
   return (
     <PageFrame>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/club" element={<Club />} />
+        <Route path="/bureau" element={<Club />} />
+        <Route path="/club" element={<Navigate to="/bureau" replace />} />
         <Route path="/creneaux" element={<SchedulePage />} />
         <Route path="/evenements" element={<EventsPage />} />
         <Route path="/equipes" element={<TeamsOverview />} />
@@ -4080,17 +4763,7 @@ export default function App() {
         <Route path="/rgpd" element={<PrivacyPolicy />} />
         <Route path="/webmaster" element={<Webmaster />} />
         <Route path="/webmaster/utilisateurs" element={<UserManagement />} />
-        <Route
-          path="*"
-          element={
-            <section className="not-found">
-              <h1>Cette page n’existe pas.</h1>
-              <Link className="text-link" to="/">
-                Retour à l’accueil <ArrowRight />
-              </Link>
-            </section>
-          }
-        />
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </PageFrame>
   );
