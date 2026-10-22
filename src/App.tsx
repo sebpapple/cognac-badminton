@@ -10,7 +10,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, NavLink, Route, Routes, useParams } from "react-router-dom";
+import {
+  Link,
+  NavLink,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 import {
   addDoc,
   collection,
@@ -18,10 +25,12 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
@@ -36,6 +45,8 @@ import {
 import {
   ArrowDown,
   ArrowRight,
+  ArrowUp,
+  ArrowUpDown,
   ArrowUpRight,
   CalendarDays,
   ChevronLeft,
@@ -51,7 +62,10 @@ import {
   X,
 } from "lucide-react";
 import { Article, ClubEvent, demoArticles, demoEvents } from "./data";
-import { clubTeams, TeamSource } from "./teamSources";
+import {
+  TeamData,
+  TeamSource,
+} from "./teamSources";
 import { auth, db, firebaseEnabled } from "./firebase";
 
 type SiteRole = "admin" | "editor";
@@ -68,7 +82,7 @@ type BoardMember = {
   photoUrl: string;
   order?: number;
 };
-type WebmasterTab = "articles" | "board" | "events";
+type WebmasterTab = "articles" | "board" | "events" | "teams";
 
 function sortBoardMembers(members: BoardMember[]) {
   return [...members].sort((first, second) => {
@@ -296,6 +310,8 @@ function Footer() {
         <Link to="/webmaster">
           <ShieldCheck size={14} /> Espace webmaster
         </Link>
+        <Link to="/mentions-legales">Mentions légales</Link>
+        <Link to="/rgpd">Données personnelles</Link>
         <span>Jouons collectif.</span>
       </div>
     </footer>
@@ -311,7 +327,38 @@ function PageFrame({ children }: { children: ReactNode }) {
       <Header />
       <main id="contenu">{children}</main>
       <Footer />
+      <PageScrollControls />
     </>
+  );
+}
+
+function PageScrollControls() {
+  const { pathname } = useLocation();
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    setShowBackToTop(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const updateVisibility = () => setShowBackToTop(window.scrollY > 300);
+    updateVisibility();
+    window.addEventListener("scroll", updateVisibility, { passive: true });
+    return () => window.removeEventListener("scroll", updateVisibility);
+  }, []);
+
+  if (!showBackToTop) return null;
+  return (
+    <button
+      className="back-to-top"
+      type="button"
+      aria-label="Revenir en haut de page"
+      title="Revenir en haut de page"
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+    >
+      <ArrowUp size={20} aria-hidden="true" />
+    </button>
   );
 }
 
@@ -1125,7 +1172,7 @@ function TeamCard({ team }: { team: TeamSource }) {
       <span className="team-division">{team.shortName}</span>
       <div>
         <h2>{team.name}</h2>
-        <p>Calendrier, résultats et effectif sur FFBad</p>
+        <p>Effectif, calendrier et résultats</p>
       </div>
       <ArrowUpRight className="team-card-arrow" size={20} />
     </Link>
@@ -1133,6 +1180,7 @@ function TeamCard({ team }: { team: TeamSource }) {
 }
 
 function TeamsOverview() {
+  const { teams, loading, error } = useTeamList();
   return (
     <>
       <PageIntro
@@ -1144,18 +1192,34 @@ function TeamsOverview() {
             <em>en compétition.</em>
           </>
         }
-        description="Calendriers, scores et effectifs publiés directement par la Fédération Française de Badminton."
+        description="Retrouvez les effectifs, calendriers et résultats de nos équipes interclubs."
       />
       <section className="section team-hub">
         <div className="container">
+          {loading && (
+            <p className="admin-empty" role="status">
+              Chargement des équipes…
+            </p>
+          )}
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
           <div className="team-hub-list">
-            {clubTeams.map((team) => (
+            {teams.map((team) => (
               <TeamCard key={team.id} team={team} />
             ))}
           </div>
+          {!loading && !error && teams.length === 0 && (
+            <p className="team-empty">
+              La liste des équipes sera disponible après la prochaine
+              synchronisation FFBaD.
+            </p>
+          )}
           <p className="team-data-source">
-            Les fiches intégrées sont hébergées par la FFBaD. Leur affichage
-            dépend de la disponibilité de son site.
+            Les données sont synchronisées depuis les fiches officielles
+            FFBaD/ICBaD.
           </p>
         </div>
       </section>
@@ -1163,14 +1227,202 @@ function TeamsOverview() {
   );
 }
 
+type TeamDocument = Partial<TeamData> & { updatedAt?: Timestamp };
+
+function compareTeamDivisions(first: TeamSource, second: TeamSource) {
+  const getRank = (team: TeamSource) => {
+    const match = team.shortName.match(/^\s*([NRD])\s*(\d+)/i);
+    if (!match) return { level: 3, division: Number.MAX_SAFE_INTEGER };
+    const levels = { N: 0, R: 1, D: 2 };
+    return {
+      level: levels[match[1].toUpperCase() as "N" | "R" | "D"],
+      division: Number(match[2]),
+    };
+  };
+  const firstRank = getRank(first);
+  const secondRank = getRank(second);
+  return (
+    firstRank.level - secondRank.level ||
+    firstRank.division - secondRank.division ||
+    first.shortName.localeCompare(second.shortName, "fr", {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+}
+
+function useTeamList() {
+  const [teams, setTeams] = useState<TeamSource[]>([]);
+  const [loading, setLoading] = useState(Boolean(db));
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!db) {
+      setLoading(false);
+      return;
+    }
+    const firestore = db;
+    setLoading(true);
+    return onSnapshot(
+      collection(firestore, "teams"),
+      (snapshot) => {
+        const currentTeams = snapshot.docs
+          .map((entry) => {
+            const value = entry.data();
+            if (
+              typeof value.name !== "string" ||
+              typeof value.shortName !== "string" ||
+              typeof value.sourceUrl !== "string"
+            )
+              return null;
+            return {
+              id: entry.id,
+              name: value.name,
+              shortName: value.shortName,
+              sourceUrl: value.sourceUrl,
+            };
+          })
+          .filter((team): team is TeamSource => team !== null)
+          .sort(compareTeamDivisions);
+        setTeams(currentTeams);
+        setError("");
+        setLoading(false);
+      },
+      () => {
+        setError("Impossible de charger la liste des équipes.");
+        setLoading(false);
+      },
+    );
+  }, []);
+
+  return { teams, loading, error };
+}
+
+function useTeamData(teamId: string | null) {
+  const [data, setData] = useState<TeamDocument | null>(null);
+  const [loading, setLoading] = useState(Boolean(db && teamId));
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setData(null);
+    setError("");
+    if (!db || !teamId) {
+      setLoading(false);
+      if (teamId) setError("Les données d’équipe ne sont pas disponibles.");
+      return;
+    }
+
+    const firestore = db;
+    setLoading(true);
+    return onSnapshot(
+      doc(firestore, "teams", teamId),
+      (snapshot) => {
+        const value = snapshot.exists() ? snapshot.data() : null;
+        setData(
+          value
+            ? {
+                players: Array.isArray(value?.players) ? value.players : [],
+                matches: Array.isArray(value?.matches) ? value.matches : [],
+                standings: Array.isArray(value?.standings)
+                  ? value.standings
+                  : [],
+                name: value?.name,
+                shortName: value?.shortName,
+                sourceUrl: value?.sourceUrl,
+                season: value?.season,
+                updatedAt: value?.updatedAt,
+              }
+            : null,
+        );
+        setLoading(false);
+      },
+      () => {
+        setError("Impossible de charger les données de cette équipe.");
+        setLoading(false);
+      },
+    );
+  }, [teamId]);
+
+  return { data, loading, error };
+}
+
+function formatTeamDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month - 1, day, 12));
+}
+
+function renderStandingPlace(position: string) {
+  const place = Number.parseInt(position, 10);
+  const medal =
+    place === 1
+      ? "🥇"
+      : place === 2
+        ? "🥈"
+        : place === 3
+          ? "🥉"
+          : null;
+  if (!medal) return position;
+
+  return (
+    <span
+      className="team-rank-indicator"
+      aria-label={`${place}${place === 1 ? "re" : "e"} place`}
+    >
+      <span aria-hidden="true">{medal}</span>
+    </span>
+  );
+}
+
+type PlayerSortKey = "name" | "role";
+type PlayerSort = { key: PlayerSortKey; direction: "ascending" | "descending" };
+
 function TeamDetails() {
   const { teamId } = useParams();
-  const team = clubTeams.find((item) => item.id === teamId);
-  if (!team)
+  const { data, loading, error } = useTeamData(teamId ?? null);
+  const team: TeamSource | null =
+    data?.name && data.shortName && data.sourceUrl && teamId
+      ? {
+          id: teamId,
+          name: data.name,
+          shortName: data.shortName,
+          sourceUrl: data.sourceUrl,
+        }
+      : null;
+  const [playerSort, setPlayerSort] = useState<PlayerSort>({
+    key: "name",
+    direction: "ascending",
+  });
+  const sortedPlayers = useMemo(
+    () =>
+      [...(data?.players ?? [])].sort((first, second) => {
+        const comparison = (first[playerSort.key] ?? "").localeCompare(
+          second[playerSort.key] ?? "",
+          "fr",
+          { sensitivity: "base", numeric: true },
+        );
+        return playerSort.direction === "ascending" ? comparison : -comparison;
+      }),
+    [data?.players, playerSort],
+  );
+  if (loading)
     return (
       <section className="section article-missing">
         <div className="container">
-          <p>Cette équipe n’existe pas.</p>
+          <p className="admin-empty" role="status">
+            Chargement des données de l’équipe…
+          </p>
+        </div>
+      </section>
+    );
+  if (error || !team)
+    return (
+      <section className="section article-missing">
+        <div className="container">
+          <p>{error || "Cette équipe n’existe pas ou n’est plus active."}</p>
           <Link className="text-link" to="/equipes">
             Voir toutes les équipes <ArrowRight size={16} />
           </Link>
@@ -1185,10 +1437,10 @@ function TeamDetails() {
           <>
             {team.name}
             <br />
-            <em>Fiche FFBaD</em>
+            <em>Interclubs</em>
           </>
         }
-        description="Calendrier, résultats et effectif officiel de l’équipe."
+        description="Composition, calendrier et résultats de l’équipe."
       />
       <section className="section team-detail">
         <div className="container">
@@ -1198,30 +1450,239 @@ function TeamDetails() {
             </Link>
             <a
               className="text-link"
-              href={team.sourceUrl}
+              href={data?.sourceUrl ?? team.sourceUrl}
               target="_blank"
               rel="noreferrer"
             >
               Ouvrir sur FFBaD <ArrowUpRight size={16} />
             </a>
           </div>
-          <p className="team-source-note">
-            Fiche officielle intégrée. Les données affichées sont celles
-            disponibles sur FFBaD au moment de la consultation.
-          </p>
-          <div className="ffbad-frame-wrap">
-            <iframe
-              className="ffbad-team-frame"
-              title={`Fiche FFBaD ${team.name}`}
-              src={team.sourceUrl}
-              loading="lazy"
-              referrerPolicy="strict-origin-when-cross-origin"
-            />
-          </div>
+          {data?.updatedAt && (
+            <p className="team-source-note">
+              Données FFBaD synchronisées le{" "}
+              {data.updatedAt.toDate().toLocaleDateString("fr-FR")} à{" "}
+              {data.updatedAt.toDate().toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+              . Ces
+              informations proviennent de la FFBaD
+              {data.season ? ` pour la saison ${data.season}` : ""}.
+            </p>
+          )}
+          {loading && (
+            <p className="admin-empty" role="status">
+              Chargement des données de l’équipe…
+            </p>
+          )}
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          {!loading && !error && (
+            <>
+              <section className="team-data-section">
+                <h2>Composition</h2>
+                {data?.players?.length ? (
+                  <div className="team-table-wrap">
+                    <table className="team-table">
+                      <caption>Joueurs de l’équipe {team.shortName}</caption>
+                      <thead>
+                        <tr>
+                          {(
+                            [
+                              ["name", "Joueur"],
+                              ["role", "Classements FFBaD (S · D · M)"],
+                            ] as const
+                          ).map(([key, label]) => (
+                            <th
+                              key={key}
+                              scope="col"
+                              aria-sort={
+                                playerSort.key === key
+                                  ? playerSort.direction
+                                  : "none"
+                              }
+                            >
+                              <button
+                                className="team-sort-button"
+                                type="button"
+                                aria-label={`Trier par ${label}${
+                                  playerSort.key === key
+                                    ? `, ordre ${
+                                        playerSort.direction === "ascending"
+                                          ? "croissant"
+                                          : "décroissant"
+                                      }`
+                                    : ""
+                                }`}
+                                onClick={() =>
+                                  setPlayerSort((current) => ({
+                                    key,
+                                    direction:
+                                      current.key === key &&
+                                      current.direction === "ascending"
+                                        ? "descending"
+                                        : "ascending",
+                                  }))
+                                }
+                              >
+                                {label}
+                                {playerSort.key === key ? (
+                                  playerSort.direction === "ascending" ? (
+                                    <ArrowUp size={14} aria-hidden="true" />
+                                  ) : (
+                                    <ArrowDown size={14} aria-hidden="true" />
+                                  )
+                                ) : (
+                                  <ArrowUpDown
+                                    size={14}
+                                    aria-hidden="true"
+                                  />
+                                )}
+                              </button>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedPlayers.map((player, index) => (
+                          <tr key={`${player.name}-${index}`}>
+                            <td>
+                              {player.gender === "female" ? (
+                                <span
+                                  className="team-gender-icon team-gender-female"
+                                  role="img"
+                                  aria-label="Femme"
+                                >
+                                  ♀
+                                </span>
+                              ) : player.gender === "male" ? (
+                                <span
+                                  className="team-gender-icon team-gender-male"
+                                  role="img"
+                                  aria-label="Homme"
+                                >
+                                  ♂
+                                </span>
+                              ) : (
+                                <span aria-label="Sexe non renseigné">—</span>
+                              )}
+                              <span className="team-player-name">
+                                {player.name}
+                              </span>
+                            </td>
+                            <td>{player.role || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="team-empty">
+                    La composition n’a pas encore été publiée.
+                  </p>
+                )}
+              </section>
+              <section className="team-data-section">
+                <h2>Classement</h2>
+                {data?.standings?.length ? (
+                  <div className="team-table-wrap">
+                    <table className="team-table">
+                      <caption>
+                        Classement de la division de l’équipe {team.shortName}
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th className="team-rank-cell" scope="col">
+                            Place
+                          </th>
+                          <th scope="col">Équipe</th>
+                          <th scope="col">Jouées</th>
+                          <th scope="col">Gagnées</th>
+                          <th scope="col">Nulles</th>
+                          <th scope="col">Perdues</th>
+                          <th scope="col">Points</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.standings.map((standing, index) => (
+                          <tr key={`${standing.team}-${index}`}>
+                            <td className="team-rank-cell">
+                              {renderStandingPlace(standing.position)}
+                            </td>
+                            <td>{standing.team}</td>
+                            <td>{standing.played}</td>
+                            <td>{standing.won}</td>
+                            <td>{standing.drawn}</td>
+                            <td>{standing.lost}</td>
+                            <td>{standing.points}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="team-empty">
+                    Le classement n’est pas disponible pour le moment.
+                  </p>
+                )}
+              </section>
+              <section className="team-data-section">
+                <h2>Calendrier et résultats</h2>
+                {data?.matches?.length ? (
+                  <div className="team-table-wrap">
+                    <table className="team-table">
+                      <caption>
+                        Rencontres de l’équipe {team.shortName}
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th scope="col">Date</th>
+                          <th scope="col">Rencontre</th>
+                          <th scope="col">Lieu</th>
+                          <th scope="col">Position</th>
+                          <th scope="col">Résultat</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...data.matches]
+                          .sort((first, second) =>
+                            first.date.localeCompare(second.date),
+                          )
+                          .map((match, index) => (
+                            <tr
+                              key={`${match.date}-${match.opponent}-${index}`}
+                            >
+                              <td>{formatTeamDate(match.date)}</td>
+                              <td>{match.opponent}</td>
+                              <td>{match.location || "—"}</td>
+                              <td>
+                                {match.home ? "Domicile" : "Extérieur"}
+                              </td>
+                              <td>{match.score || "À venir"}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="team-empty">
+                    Aucun calendrier n’a encore été publié.
+                  </p>
+                )}
+              </section>
+            </>
+          )}
           <p className="team-data-source">
-            Si le tableau ne s’affiche pas,{" "}
-            <a href={team.sourceUrl} target="_blank" rel="noreferrer">
-              ouvrir la fiche FFBaD dans un nouvel onglet
+            Source : fiches publiques de la FFBaD.{" "}
+            <a
+              href={data?.sourceUrl ?? team.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Consulter la fiche officielle FFBaD
             </a>
             .
           </p>
@@ -2241,14 +2702,14 @@ function Contact() {
                 <span>CONTACT DIRECT</span>
                 <p>
                   Contactez-nous directement par courriel :{" "}
-                  <a href="mailto:sebastien.grauby@gmail.com">
-                    sebastien.grauby@gmail.com
+                  <a href="mailto:badcognac@gmail.com">
+                    badcognac@gmail.com
                   </a>
                 </p>
                 <p>
                   ou{" "}
                   <Link to="#message">
-                    utilisez le formulaire de contact ci-contre
+                    utilisez le formulaire de contact.
                   </Link>
                 </p>
               </div>
@@ -2338,6 +2799,11 @@ function Contact() {
                     maxLength={5000}
                   />
                 </label>
+                <p className="contact-privacy">
+                  Vos coordonnées sont utilisées pour répondre à votre demande.
+                  {" "}
+                  <Link to="/rgpd">Lire la politique de confidentialité</Link>.
+                </p>
                 <button
                   className="button button-copper"
                   type="submit"
@@ -2357,6 +2823,396 @@ function Contact() {
         </div>
       </section>
     </>
+  );
+}
+
+function LegalNotice() {
+  return (
+    <>
+      <PageIntro
+        eyebrow="INFORMATIONS DU SITE"
+        title={
+          <>
+            Mentions <em>légales.</em>
+          </>
+        }
+        description="Les informations relatives à l’éditeur, à la publication et à l’hébergement du site."
+      />
+      <section className="section legal-section">
+        <div className="container legal-content">
+          <section>
+            <h2>Éditeur du site</h2>
+            <p>
+              <strong>Cognac Badminton (CB16)</strong>
+              <br />
+              Siège social : Rue du Port, 16100 Cognac, France
+              <br />
+              Courriel : <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a>
+              <br />
+              Aucun numéro de téléphone public n’a été communiqué par le club.
+            </p>
+          </section>
+          <section>
+            <h2>Directeur de la publication</h2>
+            <p>Philippe Pech.</p>
+          </section>
+          <section>
+            <h2>Hébergement</h2>
+            <p>
+              Le site est hébergé par GitHub Pages, service de GitHub, Inc.,
+              88 Colin P Kelly Jr St, San Francisco, CA 94107, États-Unis.
+              <br />
+              <a href="https://support.github.com/contact" target="_blank" rel="noreferrer">
+                Contacter l’assistance GitHub
+              </a>
+            </p>
+          </section>
+          <section>
+            <h2>Propriété intellectuelle</h2>
+            <p>
+              Les textes, photographies, marques et autres éléments présents
+              sur ce site peuvent être protégés par des droits de propriété
+              intellectuelle. Leur réutilisation nécessite l’autorisation
+              préalable de leurs titulaires, sauf exception légale. Les
+              contenus de tiers restent la propriété de leurs auteurs ou
+              ayants droit.
+            </p>
+          </section>
+          <section>
+            <h2>Sources et informations</h2>
+            <p>
+              Les informations sportives publiées sur les pages des équipes
+              sont issues des pages publiques de la{" "}
+              <a href="https://icbad.ffbad.org/instance/CB16" target="_blank" rel="noreferrer">
+                FFBaD / ICBaD
+              </a>
+              . Les contenus du site sont fournis à titre informatif ; pour
+              confirmer un horaire ou une rencontre, contactez le club.
+            </p>
+            <p>
+              <a href="https://entreprendre.service-public.gouv.fr/vosdroits/F37351" target="_blank" rel="noreferrer">
+                Informations officielles sur les mentions des sites internet
+              </a>
+              {" · "}
+              <a href="https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000801164/" target="_blank" rel="noreferrer">
+                Loi pour la confiance dans l’économie numérique
+              </a>
+            </p>
+          </section>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function PrivacyPolicy() {
+  return (
+    <>
+      <PageIntro
+        eyebrow="VIE PRIVÉE"
+        title={
+          <>
+            Données <em>personnelles.</em>
+          </>
+        }
+        description="Comment le Cognac Badminton utilise les données personnelles sur ce site et comment exercer vos droits."
+      />
+      <section className="section legal-section">
+        <div className="container legal-content">
+          <p className="legal-updated">Dernière mise à jour : 22 octobre 2026</p>
+          <section>
+            <h2>Responsable du traitement</h2>
+            <p>
+              Le responsable du traitement est Cognac Badminton (CB16), Rue du
+              Port, 16100 Cognac, France. Pour toute question ou demande
+              concernant vos données, écrivez à{" "}
+              <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a>.
+            </p>
+          </section>
+          <section>
+            <h2>Données et finalités</h2>
+            <ul>
+              <li>
+                <strong>Formulaire de contact :</strong> nom, adresse e-mail,
+                sujet et message, afin de répondre à votre demande. La base
+                juridique est l’intérêt légitime du club à traiter les demandes
+                qui lui sont adressées.
+              </li>
+              <li>
+                <strong>Administration du site :</strong> adresse e-mail,
+                identifiant de compte et rôle des personnes autorisées, pour
+                sécuriser l’accès webmaster et gérer les contenus. Les comptes
+                et rôles sont conservés tant que l’accès est nécessaire, puis
+                supprimés ou désactivés. La base juridique est l’intérêt
+                légitime du club à administrer et sécuriser son site.
+              </li>
+              <li>
+                <strong>Contenus du club :</strong> noms, fonctions et
+                photographies des membres du bureau, ainsi que les informations
+                sportives publiées par la FFBaD/ICBaD (noms des joueurs,
+                équipes, classements et rencontres). Ces données servent à
+                présenter les activités du club. Les photographies sont
+                publiées avec l’accord des personnes concernées. La base
+                juridique est leur consentement pour les portraits et
+                l’intérêt légitime du club pour les informations sportives
+                publiques ; les données d’équipe sont actualisées
+                périodiquement et les contenus sont retirés lorsqu’ils ne
+                sont plus utiles ou à jour.
+              </li>
+            </ul>
+            <p>
+              Le site ne propose ni inscription à une newsletter ni collecte
+              de données de paiement. Ne transmettez pas de données sensibles
+              dans le formulaire de contact.
+            </p>
+          </section>
+          <section>
+            <h2>Destinataires et prestataires</h2>
+            <p>
+              Les données sont accessibles aux personnes habilitées du club et
+              aux prestataires nécessaires au fonctionnement du site :
+              Web3Forms pour transmettre les messages, Google Firebase pour
+              l’authentification webmaster et les contenus administrés,
+              Cloudinary pour héberger les photographies du bureau, GitHub
+              Pages pour l’hébergement du site et Cloudflare pour la
+              synchronisation des données sportives publiques. Les images
+              hébergées par Unsplash sont chargées depuis leurs serveurs. Ces
+              prestataires peuvent traiter des données techniques de connexion
+              (par exemple l’adresse IP) selon leurs propres politiques.
+            </p>
+            <p>
+              Les services peuvent traiter des données hors de l’Espace
+              économique européen. Les modalités et garanties applicables sont
+              décrites dans les informations de confidentialité des
+              prestataires :{" "}
+              <a href="https://web3forms.com/privacy" target="_blank" rel="noreferrer">Web3Forms</a>
+              {" · "}
+              <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noreferrer">Firebase / Google</a>
+              {" · "}
+              <a href="https://cloudinary.com/privacy" target="_blank" rel="noreferrer">Cloudinary</a>
+              {" · "}
+              <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noreferrer">GitHub</a>
+              {" · "}
+              <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noreferrer">Cloudflare</a>
+              {" · "}
+              <a href="https://unsplash.com/privacy" target="_blank" rel="noreferrer">Unsplash</a>.
+            </p>
+          </section>
+          <section>
+            <h2>Durées de conservation</h2>
+            <p>
+              Le club supprime les messages de contact une fois la demande
+              traitée. Web3Forms indique toutefois conserver les soumissions
+              pendant une durée maximale de trois ans, sauf suppression
+              anticipée ou durée plus courte applicable à l’offre utilisée.
+              Les contenus du club sont conservés pendant leur publication ;
+              les données d’équipe sont remplacées ou supprimées lors des
+              synchronisations. Lorsqu’un portrait est retiré du site, le
+              fichier correspondant sur Cloudinary doit aussi être supprimé
+              séparément. Les comptes webmaster sont conservés pendant la
+              durée de leur habilitation.
+            </p>
+            <p>
+              Les données d’équipe proviennent de pages publiques FFBaD/ICBaD.
+              Une demande de rectification ou de retrait peut nécessiter une
+              correction de la source fédérale ; tant qu’elles y figurent,
+              certaines données peuvent être réimportées lors d’une
+              synchronisation.
+            </p>
+          </section>
+          <section>
+            <h2>Cookies et traceurs</h2>
+            <p>
+              Le site n’intègre pas d’outil de mesure d’audience ni de publicité.
+              L’espace webmaster utilise une authentification et un stockage
+              technique nécessaires au maintien de la connexion. Les
+              prestataires d’hébergement et de sécurité peuvent également
+              utiliser des traceurs strictement nécessaires à leur service.
+            </p>
+          </section>
+          <section>
+            <h2>Vos droits</h2>
+            <p>
+              Dans les conditions prévues par la réglementation, vous pouvez
+              demander l’accès à vos données, leur rectification, leur
+              effacement ou la limitation de leur traitement, vous opposer à
+              certains traitements et, lorsque ce droit s’applique, demander
+              leur portabilité. Lorsque le traitement repose sur votre accord,
+              vous pouvez le retirer à tout moment, sans effet rétroactif.
+            </p>
+            <p>
+              Adressez votre demande à{" "}
+              <a href="mailto:badcognac@gmail.com">badcognac@gmail.com</a> ou
+              par courrier au siège social indiqué dans les{" "}
+              <Link to="/mentions-legales">mentions légales</Link>. Vous
+              pouvez également adresser une réclamation à la{" "}
+              <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noreferrer">
+                Commission nationale de l’informatique et des libertés (CNIL)
+              </a>
+              .
+            </p>
+          </section>
+          <section>
+            <h2>En savoir plus</h2>
+            <p>
+              <a href="https://www.cnil.fr/fr/les-droits-pour-maitriser-vos-donnees-personnelles" target="_blank" rel="noreferrer">
+                Vos droits sur les données personnelles — CNIL
+              </a>
+              {" · "}
+              <a href="https://eur-lex.europa.eu/eli/reg/2016/679/oj?locale=fr" target="_blank" rel="noreferrer">
+                Règlement général sur la protection des données (RGPD)
+              </a>
+              {" · "}
+              <a href="https://entreprendre.service-public.gouv.fr/vosdroits/F24270" target="_blank" rel="noreferrer">
+                Protection des données personnelles — Service-Public.fr
+              </a>
+            </p>
+          </section>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function TeamManager() {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const syncUrl = import.meta.env.VITE_TEAM_SYNC_URL;
+
+  async function refresh() {
+    if (!db || !auth?.currentUser) {
+      setError("Connectez-vous avec un compte administrateur Firebase.");
+      return;
+    }
+    const firestore = db;
+    const currentUser = auth.currentUser;
+    if (!syncUrl) {
+      setError(
+        "Le service de synchronisation FFBaD n’est pas configuré. Consultez le README pour le déployer.",
+      );
+      return;
+    }
+
+    setError("");
+    setNotice("");
+    setSaving(true);
+    try {
+      const token = await currentUser.getIdToken();
+      const response = await fetch(syncUrl, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        teams?: Record<string, TeamData>;
+      };
+      if (!response.ok)
+        throw new Error(result.error ?? "La récupération FFBaD a échoué.");
+      const teams = Object.entries(result.teams ?? {});
+      if (teams.length === 0 || teams.length > 100)
+        throw new Error(
+          "La FFBaD n’a pas retourné une liste d’équipes exploitable.",
+        );
+
+      for (const [id, data] of teams) {
+        const sourceTeamId =
+          typeof data?.sourceUrl === "string"
+            ? data.sourceUrl.match(
+                /^https:\/\/icbad\.ffbad\.org\/equipe\/(\d+)$/,
+              )?.[1]
+            : undefined;
+        if (
+          !data ||
+          typeof data !== "object" ||
+          !/^\d+$/.test(id) ||
+          sourceTeamId !== id ||
+          typeof data.name !== "string" ||
+          !data.name.trim() ||
+          typeof data.shortName !== "string" ||
+          !data.shortName.trim() ||
+          !Array.isArray(data.players) ||
+          data.players.length === 0 ||
+          !Array.isArray(data.matches) ||
+          !Array.isArray(data.standings) ||
+          typeof data.season !== "string"
+        )
+          throw new Error(
+            `Les données reçues pour ${
+              typeof data?.shortName === "string" ? data.shortName : id
+            } sont incomplètes ; rien n’a été enregistré.`,
+          );
+      }
+
+      const existingTeams = await getDocs(collection(firestore, "teams"));
+      const currentIds = new Set(teams.map(([id]) => id));
+      const obsoleteTeams = existingTeams.docs.filter(
+        (entry) => !currentIds.has(entry.id),
+      );
+      if (teams.length + obsoleteTeams.length > 500)
+        throw new Error(
+          "La liste dépasse la limite d’une écriture Firestore atomique ; rien n’a été enregistré.",
+        );
+
+      const batch = writeBatch(firestore);
+      teams.forEach(([id, data]) => {
+        batch.set(doc(firestore, "teams", id), {
+          ...data,
+          updatedAt: serverTimestamp(),
+        });
+      });
+      obsoleteTeams.forEach((entry) => batch.delete(entry.ref));
+      await batch.commit();
+      setNotice("Les données FFBaD ont été récupérées et publiées.");
+    } catch (refreshError) {
+      setError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : "La synchronisation FFBaD a échoué. Les données précédentes sont conservées.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="team-admin" aria-label="Actualisation des équipes">
+      <div className="admin-top">
+        <div>
+          <span className="eyebrow">DONNÉES DES INTERCLUBS</span>
+          <h2>Actualiser les équipes</h2>
+        </div>
+      </div>
+      <p className="team-admin-help">
+        Récupère les compositions, classements et rencontres publiés sur le site
+        de la FFBaD, puis les enregistre dans Firebase pour les pages du club.
+      </p>
+      <button
+        className="button button-copper"
+        type="button"
+        onClick={refresh}
+        disabled={saving || !syncUrl}
+      >
+        {saving ? "Récupération des données FFBaD…" : "Actualiser équipes"}{" "}
+        <ArrowRight size={16} />
+      </button>
+      {!syncUrl && (
+        <p className="team-source-note" role="status">
+          Le Worker de synchronisation n’est pas encore configuré. Suivez les
+          étapes de déploiement du README.
+        </p>
+      )}
+      {notice && (
+        <p className="form-success" role="status">
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -2496,7 +3352,10 @@ function Webmaster() {
     }
   }
   function handleTabKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    const tabs: WebmasterTab[] = ["articles", "board", "events"];
+    const tabs: WebmasterTab[] =
+      role === "admin"
+        ? ["articles", "board", "events", "teams"]
+        : ["articles", "board", "events"];
     const currentIndex = tabs.indexOf(activeTab);
     const nextIndex =
       event.key === "ArrowRight"
@@ -2513,6 +3372,9 @@ function Webmaster() {
     setActiveTab(tabs[nextIndex]);
     document.getElementById(`webmaster-tab-${tabs[nextIndex]}`)?.focus();
   }
+  useEffect(() => {
+    if (role !== "admin" && activeTab === "teams") setActiveTab("articles");
+  }, [activeTab, role]);
   return (
     <>
       <PageIntro
@@ -2678,6 +3540,20 @@ function Webmaster() {
                 >
                   Évènements
                 </button>
+                {role === "admin" && (
+                  <button
+                    id="webmaster-tab-teams"
+                    className="webmaster-tab"
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === "teams"}
+                    aria-controls="webmaster-teams-panel"
+                    tabIndex={activeTab === "teams" ? 0 : -1}
+                    onClick={() => setActiveTab("teams")}
+                  >
+                    Équipes
+                  </button>
+                )}
               </div>
               {activeTab === "articles" ? (
                 <section
@@ -2836,7 +3712,7 @@ function Webmaster() {
                 >
                   <BoardMembersManager />
                 </section>
-              ) : (
+              ) : activeTab === "events" ? (
                 <section
                   id="webmaster-events-panel"
                   role="tabpanel"
@@ -2845,7 +3721,16 @@ function Webmaster() {
                 >
                   <EventsManager role={role} />
                 </section>
-              )}
+              ) : role === "admin" ? (
+                <section
+                  id="webmaster-teams-panel"
+                  role="tabpanel"
+                  aria-labelledby="webmaster-tab-teams"
+                  className="webmaster-panel"
+                >
+                  <TeamManager />
+                </section>
+              ) : null}
             </div>
           )}
         </div>
@@ -3191,6 +4076,8 @@ export default function App() {
         <Route path="/actualites" element={<News />} />
         <Route path="/actualites/:id" element={<ArticleDetail />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/mentions-legales" element={<LegalNotice />} />
+        <Route path="/rgpd" element={<PrivacyPolicy />} />
         <Route path="/webmaster" element={<Webmaster />} />
         <Route path="/webmaster/utilisateurs" element={<UserManagement />} />
         <Route

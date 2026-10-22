@@ -27,7 +27,39 @@ Pour les portraits des membres du bureau, ajouter également les variables publi
 
 ## Équipes interclubs
 
-La page `/equipes` renvoie vers les fiches R3, D2, D3 et D4 ; chaque fiche est intégrée depuis le site public FFBaD afin d’afficher son calendrier, ses résultats et son effectif à la consultation. Un lien permet aussi d’ouvrir la fiche directement sur FFBaD si l’intégration est indisponible. Les fiches sont des pages tierces complètes, pas des tableaux extraits ; leur présentation, disponibilité et politique d’intégration dépendent de la FFBaD. L’API documentée publiquement pointe vers un environnement de test et requiert des identifiants ; aucun accès de production n’est configuré.
+La page des équipes et les fiches individuelles sont générées à partir des équipes Cognac que le Worker découvre dans les classements publics ICBaD/FFBaD, au lieu d’une liste codée en dur. L’identifiant de fiche publique FFBaD sert d’identifiant Firestore et d’URL de détail. La synchronisation manuelle depuis `/webmaster` ou le Cron Cloudflare (quotidien à 06:00 UTC) collecte toutes les équipes trouvées, les publie ensemble et retire les anciennes équipes qui ne figurent plus sur la page fédérale. Si la collecte échoue, les données précédemment publiées restent intactes. La lecture publique est autorisée ; les écritures manuelles sont réservées aux admins Firebase et l’écriture planifiée utilise un compte de service protégé comme secret Cloudflare.
+
+Pour activer la synchronisation :
+
+1. Dans `workers/team-sync/wrangler.toml`, vérifier le Project ID Firebase et la liste `ALLOWED_ORIGINS` (site GitHub Pages et origines locales de développement).
+2. Dans Google Cloud Console, créer un compte de service dédié au Worker et lui accorder le rôle IAM **Cloud Datastore User** sur le projet Firebase. Générer une clé JSON pour ce compte. Ce compte sert uniquement à l’écriture planifiée ; les règles Firestore ne s’appliquent pas aux comptes de service, c’est pourquoi cette clé ne doit jamais être publiée ni ajoutée au dépôt.
+3. Depuis un terminal avec Node.js, se connecter à Cloudflare puis créer le Worker :
+
+	```sh
+	npx wrangler login
+	npx wrangler deploy --config workers/team-sync/wrangler.toml
+	```
+
+4. Enregistrer le JSON comme secret Worker. À l’invite, coller le contenu complet du fichier de clé JSON :
+
+	```sh
+	npx wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON --config workers/team-sync/wrangler.toml
+	```
+
+5. Redéployer pour publier le déclencheur Cron avec le secret configuré :
+
+	```sh
+	npx wrangler deploy --config workers/team-sync/wrangler.toml
+	```
+
+6. Copier l’URL `workers.dev` affichée par Wrangler et l’enregistrer comme variable GitHub Actions `VITE_TEAM_SYNC_URL`. Pour le développement local, ajouter `VITE_TEAM_SYNC_URL` à `.env.local`.
+7. Publier les règles de `firestore.rules`, puis reconstruire/redéployer le site afin que cette variable soit intégrée.
+
+Le déclencheur est configuré dans `wrangler.toml` et l’observabilité Cloudflare est activée pour voir les exécutions et erreurs. Le Cron Cloudflare utilise UTC. Après le déploiement, vérifier dans Cloudflare Dashboard > Workers & Pages > `cognac-badminton-team-sync` > Settings > Triggers que le Cron est actif, puis consulter **Observability > Logs**. Les logs indiquent le démarrage (expression Cron et heure planifiée), la réussite ou l’erreur. En cas d’échec, la collecte ne publie pas de mise à jour partielle ; le bouton manuel reste disponible.
+
+Après toute modification du parseur dans `workers/team-sync`, redéployer le Worker avec la commande de l’étape 5. Les données déjà enregistrées dans Firestore ne sont pas recalculées immédiatement ; lancer « Actualiser équipes » dans `/webmaster` pour ne pas attendre la prochaine exécution planifiée. Après une modification de l’interface, reconstruire/redéployer également le site.
+
+Le Worker n’accepte que les URL ICBaD construites à partir des liens de la page publique du club. La route HTTP manuelle vérifie le jeton Firebase et le rôle `admin` avant de lire les pages. La clé du compte de service n’est utilisée que par le déclencheur planifié et doit rester dans les secrets Cloudflare ; ne jamais la committer ni l’ajouter à `.env.local`.
 
 ## Firebase
 
@@ -57,9 +89,15 @@ Dans l’espace webmaster, la barre d’outils du contenu des actualités permet
 
 ### Envoi des messages par e-mail
 
-Le formulaire utilise [Web3Forms](https://web3forms.com/) pour envoyer les messages à `sebastien.grauby@gmail.com`, sans serveur ni Firebase Blaze. La clé d’accès fournie pour le formulaire est intégrée au code du site ; les clés Web3Forms sont destinées à être utilisées dans un site statique et sont visibles dans le bundle publié. Limiter son utilisation au domaine du site depuis les réglages Web3Forms.
+Le formulaire utilise [Web3Forms](https://web3forms.com/) pour envoyer les messages à `badcognac@gmail.com`, sans serveur ni Firebase Blaze. La clé d’accès fournie pour le formulaire est intégrée au code du site ; les clés Web3Forms sont destinées à être utilisées dans un site statique et sont visibles dans le bundle publié. Limiter son utilisation au domaine du site depuis les réglages Web3Forms.
 
-L’offre gratuite de Web3Forms annonce 250 soumissions par mois. Le service traite les données envoyées par les visiteurs ; informer ceux-ci du traitement des données et consulter les conditions de confidentialité du fournisseur. En cas d’échec du formulaire, la page affiche une erreur et propose l’adresse e-mail directe via `mailto:`.
+L’offre gratuite de Web3Forms annonce 250 soumissions par mois. Le club supprime les messages une fois la demande traitée ; la politique Web3Forms indique une conservation maximale de trois ans pour les soumissions, sauf suppression anticipée ou durée plus courte liée à l’offre. En cas d’échec du formulaire, la page affiche une erreur et propose l’adresse e-mail directe via `mailto:`.
+
+## Mentions légales et données personnelles
+
+Les pages `/mentions-legales` et `/rgpd` présentent l’éditeur, le directeur de la publication, l’hébergeur, les traitements de données du site, les prestataires et les droits des personnes. Les coordonnées de l’association et la règle de conservation des messages ont été communiquées par le club. Revoir ces informations si les coordonnées, fournisseurs, fonctionnalités du site ou pratiques de conservation changent. Les informations des fournisseurs et leurs durées de conservation peuvent également évoluer.
+
+Références utilisées : [mentions obligatoires des sites internet — Service-Public.fr](https://entreprendre.service-public.gouv.fr/vosdroits/F37351), [protection des données personnelles — Service-Public.fr](https://entreprendre.service-public.gouv.fr/vosdroits/F24270), [Web3Forms — politique de confidentialité](https://web3forms.com/privacy) et [CNIL](https://www.cnil.fr/).
 
 ## À confirmer avant publication
 

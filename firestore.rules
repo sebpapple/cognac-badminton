@@ -51,6 +51,32 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /teams/{teamId} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && teamId.matches('^[0-9]+$')
+        && request.resource.data.keys().hasAll(['name', 'shortName', 'players', 'matches', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['name', 'shortName', 'players', 'matches', 'standings', 'sourceUrl', 'season', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.shortName is string
+        && request.resource.data.shortName.size() > 0
+        && request.resource.data.shortName.size() <= 60
+        && request.resource.data.players is list
+        && request.resource.data.players.size() <= 60
+        && request.resource.data.matches is list
+        && request.resource.data.matches.size() <= 80
+        && request.resource.data.standings is list
+        && request.resource.data.standings.size() <= 40
+        && request.resource.data.sourceUrl is string
+        && request.resource.data.sourceUrl.matches('^https://icbad\\.ffbad\\.org/equipe/[0-9]+$')
+        && request.resource.data.season is string
+        && request.resource.data.season.size() <= 20
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if isAdmin();
+    }
+
     match /boardMembers/{memberId} {
       allow read: if true;
       allow create, update: if canWriteArticles()

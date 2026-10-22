@@ -5,29 +5,36 @@ export type TeamSource = {
   sourceUrl: string;
 };
 
-export const clubTeams: TeamSource[] = [
-  {
-    id: "r3",
-    name: "Régionale 3",
-    shortName: "R3",
-    sourceUrl: "https://icbad.ffbad.org/equipe/75623",
-  },
-  {
-    id: "d2",
-    name: "Départementale 2",
-    shortName: "D2",
-    sourceUrl: "https://icbad.ffbad.org/equipe/79568",
-  },
-  {
-    id: "d3",
-    name: "Départementale 3",
-    shortName: "D3",
-    sourceUrl: "https://icbad.ffbad.org/equipe/79899",
-  },
-  {
-    id: "d4",
-    name: "Départementale 4",
-    shortName: "D4",
-    sourceUrl: "https://icbad.ffbad.org/equipe/79906",
-  },
-];
+export type TeamPlayer = {
+  name: string;
+  role: string;
+  gender?: "female" | "male" | "unknown";
+};
+
+export type TeamMatch = {
+  date: string;
+  opponent: string;
+  location: string;
+  home: boolean;
+  score: string;
+};
+
+export type TeamStanding = {
+  position: string;
+  team: string;
+  played: string;
+  won: string;
+  drawn: string;
+  lost: string;
+  points: string;
+};
+
+export type TeamData = {
+  name: string;
+  shortName: string;
+  players: TeamPlayer[];
+  matches: TeamMatch[];
+  standings: TeamStanding[];
+  sourceUrl: string;
+  season: string;
+};
